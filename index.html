@@ -1,0 +1,3174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>DUCK HUNT 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
+  #canvas { display: block; cursor: crosshair; }
+  
+  #ui {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 10;
+  }
+  
+  .stat-box {
+    background: rgba(0,0,0,0.6);
+    border: 2px solid rgba(255,220,50,0.8);
+    border-radius: 6px;
+    padding: 8px 16px;
+    text-align: center;
+    min-width: 120px;
+  }
+  
+  .stat-label {
+    color: rgba(255,220,50,0.7);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-family: 'Inter', sans-serif;
+  }
+  
+  .stat-value {
+    color: #fff;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1.1;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 2px;
+  }
+  
+  #progress-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    z-index: 10;
+  }
+  
+  #progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff6b35, #ffcc02);
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  
+  #crosshair {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px; height: 40px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  
+  #crosshair::before, #crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255,80,80,0.9);
+    border-radius: 2px;
+  }
+  #crosshair::before { width: 2px; height: 20px; top: 10px; left: 19px; }
+  #crosshair::after { width: 20px; height: 2px; top: 19px; left: 10px; }
+  
+  .crosshair-dot {
+    position: absolute;
+    width: 6px; height: 6px;
+    background: rgba(255,80,80,0.9);
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  #hit-flash {
+    position: fixed; inset: 0;
+    background: rgba(255, 255, 100, 0.3);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9;
+    transition: opacity 0.05s;
+  }
+
+  /* ── MENU OVERLAY ─────────────────────────────────────────── */
+  #screen-overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 20;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  /* Layered background */
+  #overlay-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(255,140,0,0.08) 0%, transparent 70%),
+      linear-gradient(160deg, #0a0c0f 0%, #0d1117 40%, #0a0e08 100%);
+  }
+
+  /* Animated grid lines */
+  #overlay-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,200,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,200,0,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: grid-drift 20s linear infinite;
+  }
+  @keyframes grid-drift {
+    from { background-position: 0 0; }
+    to   { background-position: 60px 60px; }
+  }
+
+  /* Vignette */
+  #overlay-vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(0,0,0,0.85) 100%);
+    pointer-events: none;
+  }
+
+  /* Scanlines */
+  #overlay-scan {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0,0,0,0.08) 3px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* Content wrapper */
+  #overlay-content {
+    position: relative; z-index: 2;
+    display: flex; flex-direction: column;
+    align-items: center;
+    animation: content-rise 0.9s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes content-rise {
+    from { opacity: 0; transform: translateY(32px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Top badge */
+  .menu-badge {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 6px;
+    color: rgba(255,200,0,0.7);
+    text-transform: uppercase;
+    border: 1px solid rgba(255,200,0,0.25);
+    padding: 5px 18px;
+    border-radius: 20px;
+    margin-bottom: 28px;
+    background: rgba(255,200,0,0.05);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Main title */
+  .menu-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(72px, 12vw, 130px);
+    letter-spacing: 12px;
+    line-height: 0.9;
+    color: #fff;
+    text-shadow:
+      0 0 60px rgba(255,180,0,0.4),
+      0 0 120px rgba(255,100,0,0.2);
+    margin-bottom: 6px;
+  }
+  .menu-title span {
+    color: #ffcc02;
+    text-shadow:
+      0 0 40px rgba(255,200,0,0.8),
+      0 0 80px rgba(255,150,0,0.4);
+  }
+
+  /* Subtitle line */
+  .menu-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 10px;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    margin-bottom: 52px;
+  }
+
+  /* Stats row */
+  .menu-stats {
+    display: flex;
+    gap: 1px;
+    margin-bottom: 52px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.03);
+  }
+  .menu-stat {
+    padding: 14px 28px;
+    text-align: center;
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  .menu-stat:last-child { border-right: none; }
+  .menu-stat-icon { font-size: 20px; margin-bottom: 4px; }
+  .menu-stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    color: #ffcc02;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .menu-stat-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  /* Controls grid */
+  .menu-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 48px;
+    width: 480px;
+  }
+  .ctrl-key {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+  .ctrl-key kbd {
+    background: rgba(255,200,0,0.12);
+    border: 1px solid rgba(255,200,0,0.3);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: #ffcc02;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  /* CTA Button */
+  .menu-cta {
+    position: relative;
+    background: #ffcc02;
+    color: #0a0c0f;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 8px;
+    padding: 16px 64px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    overflow: hidden;
+  }
+  .menu-cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 60%);
+  }
+  .menu-cta::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.4s ease;
+  }
+  .menu-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(255,200,0,0.4); }
+  .menu-cta:hover::after { left: 160%; }
+  .menu-cta:active { transform: translateY(0); }
+
+  /* Version tag */
+  .menu-version {
+    margin-top: 20px;
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.15);
+    text-transform: uppercase;
+  }
+
+  /* ── END SCREEN ─────────────────────────────────────────────── */
+  .end-badge {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    border: 1px solid;
+    padding: 5px 18px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+    backdrop-filter: blur(4px);
+  }
+  .end-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(64px, 10vw, 110px);
+    letter-spacing: 10px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .end-sub {
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 8px;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    margin-bottom: 44px;
+  }
+  .end-results {
+    display: flex;
+    gap: 1px;
+    margin-bottom: 44px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.03);
+  }
+  .end-result {
+    padding: 18px 32px;
+    text-align: center;
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  .end-result:last-child { border-right: none; }
+  .end-result-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .end-result-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* ── SHARED ─────────────────────────────────────────────────── */
+  .btn {
+    background: none;
+    border: 2px solid currentColor;
+    color: #ffcc02;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 6px;
+    padding: 14px 48px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 4px;
+  }
+  .btn:hover { background: #ffcc02; color: #000; }
+
+  #kill-msg {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #ff6b35;
+    text-shadow: 0 0 10px #ff6b35;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 15;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    transition: opacity 0.1s, transform 0.1s;
+    font-family: 'Bebas Neue', sans-serif;
+  }
+
+  #ammo-display {
+    display: flex; gap: 4px; align-items: center;
+    justify-content: center; margin-top: 4px;
+  }
+  .ammo-pip {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ffcc02;
+    transition: all 0.1s;
+  }
+  .ammo-pip.empty {
+    background: rgba(255,204,2,0.2);
+    border: 1px solid rgba(255,204,2,0.3);
+  }
+
+  #timer-box { transition: border-color 0.3s, background 0.3s; }
+  #timer-box.warning {
+    border-color: rgba(255, 100, 50, 0.9);
+    background: rgba(80, 0, 0, 0.7);
+    animation: timer-pulse 0.5s infinite alternate;
+  }
+  @keyframes timer-pulse {
+    from { box-shadow: 0 0 0px rgba(255,60,60,0); }
+    to   { box-shadow: 0 0 18px rgba(255,60,60,0.8); }
+  }
+  #timer-display.warning { color: #ff4444; }
+
+  #time-up-flash {
+    position: fixed; inset: 0;
+    background: rgba(255, 0, 0, 0.25);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9;
+  }
+
+  /* ── PAUSE MENU ─────────────────────────────────────────────── */
+  #pause-overlay {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 30;
+    text-align: center;
+  }
+
+  #pause-bg {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  #pause-panel {
+    position: relative; z-index: 2;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    background: rgba(10,12,15,0.9);
+    padding: 48px 56px;
+    width: 380px;
+    animation: pause-pop 0.25s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes pause-pop {
+    from { opacity: 0; transform: scale(0.92) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  #pause-panel .pause-indicator {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 5px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .pause-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #ffcc02;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink {
+    0%,100% { opacity: 1; } 50% { opacity: 0.2; }
+  }
+
+  #pause-panel h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 56px;
+    letter-spacing: 10px;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  #pause-panel .pause-sub {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 6px;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    margin-bottom: 36px;
+  }
+
+  .pause-stats {
+    display: flex;
+    justify-content: center;
+    gap: 1px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 7px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 36px;
+  }
+  .pause-stat {
+    flex: 1;
+    padding: 12px 8px;
+    border-right: 1px solid rgba(255,255,255,0.07);
+  }
+  .pause-stat:last-child { border-right: none; }
+  .pause-stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    color: #ffcc02;
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+  .pause-stat-lbl {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  .pause-btns {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .pause-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 6px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 5px;
+    cursor: pointer;
+    transition: all 0.18s;
+    text-transform: uppercase;
+  }
+
+  .pause-btn-primary {
+    background: #ffcc02;
+    color: #0a0c0f;
+    border: none;
+  }
+  .pause-btn-primary:hover {
+    background: #ffe040;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(255,200,0,0.3);
+  }
+
+  .pause-btn-secondary {
+    background: transparent;
+    color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .pause-btn-secondary:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.8);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  .pause-btn-danger {
+    background: transparent;
+    color: rgba(255,80,80,0.6);
+    border: 1px solid rgba(255,80,80,0.15);
+  }
+  .pause-btn-danger:hover {
+    background: rgba(255,60,60,0.08);
+    color: rgba(255,100,100,0.9);
+    border-color: rgba(255,80,80,0.35);
+  }
+
+  .pause-hint {
+    margin-top: 20px;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.15);
+    text-transform: uppercase;
+  }
+
+  /* ── COOP HUD ───────────────────────────────────────────────── */
+  #coop-hud {
+    display: none;
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .coop-panel {
+    position: absolute;
+    left: 0; right: 0;
+    height: 50%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+  }
+  #coop-panel-p1 { top: 0; }
+  #coop-panel-p2 { top: 50%; align-items: flex-start; }
+
+  .coop-player-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 4px;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-right: 10px;
+    align-self: center;
+  }
+  .p1-label { background: rgba(255,200,0,0.2); color: #ffcc02; border: 1px solid rgba(255,200,0,0.4); }
+  .p2-label { background: rgba(64,170,255,0.2); color: #4af; border: 1px solid rgba(64,170,255,0.4); }
+
+  .coop-stat-row {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .coop-stat {
+    background: rgba(0,0,0,0.55);
+    border-radius: 5px;
+    padding: 5px 12px;
+    text-align: center;
+  }
+  .coop-stat-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    color: #fff;
+    line-height: 1;
+  }
+  .coop-stat-lbl {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+  }
+
+  /* split line divider */
+  #coop-divider {
+    position: fixed;
+    top: 50%; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.3), rgba(255,255,255,0.15), transparent);
+    z-index: 11;
+    display: none;
+  }
+
+  /* coop crosshairs */
+  .coop-crosshair {
+    position: fixed;
+    width: 36px; height: 36px;
+    pointer-events: none;
+    z-index: 10;
+    display: none;
+  }
+  .coop-crosshair::before, .coop-crosshair::after {
+    content: ''; position: absolute; border-radius: 2px;
+  }
+  #ch-p1::before { width: 2px; height: 18px; top: 9px; left: 17px; background: rgba(255,200,0,0.9); }
+  #ch-p1::after  { width: 18px; height: 2px; top: 17px; left: 9px; background: rgba(255,200,0,0.9); }
+  #ch-p2::before { width: 2px; height: 18px; top: 9px; left: 17px; background: rgba(64,170,255,0.9); }
+  #ch-p2::after  { width: 18px; height: 2px; top: 17px; left: 9px; background: rgba(64,170,255,0.9); }
+
+  .coop-ammo { display:flex; gap:3px; align-items:center; justify-content:center; margin-top:3px; }
+  .coop-pip { width:6px; height:6px; border-radius:50%; }
+  .coop-pip.p1-full { background:#ffcc02; }
+  .coop-pip.p1-empty { background:rgba(255,200,0,0.15); border:1px solid rgba(255,200,0,0.25); }
+  .coop-pip.p2-full { background:#4af; }
+  .coop-pip.p2-empty { background:rgba(64,170,255,0.15); border:1px solid rgba(64,170,255,0.25); }
+
+  #coop-timer {
+    position: fixed; top: calc(50% - 18px); left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.7);
+    z-index: 12;
+    display: none;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <div class="stat-box">
+    <div class="stat-label">Puntos</div>
+    <div class="stat-value" id="score">0</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Objetivo</div>
+    <div class="stat-value" style="color:#ffcc02">600</div>
+    <div class="stat-label" style="font-size:9px; margin-top:2px">MÍNIMO PARA GANAR</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Patos</div>
+    <div class="stat-value"><span id="killed">0</span><span style="font-size:16px; opacity:0.5">/100</span></div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Munición</div>
+    <div id="ammo-display"></div>
+  </div>
+  <div class="stat-box" id="timer-box">
+    <div class="stat-label">Tiempo</div>
+    <div class="stat-value" id="timer-display">2:00</div>
+  </div>
+</div>
+
+<div id="progress-bar"><div id="progress-fill"></div></div>
+
+<div id="minigun-bar" style="display:none; position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:10; flex-direction:column; align-items:center; gap:4px;">
+  <div style="color:#ff6600; font-family:'Inter',sans-serif; font-size:10px; font-weight:600; letter-spacing:4px; text-shadow:0 0 8px #ff4400; text-transform:uppercase;">🔥 Minigun activa — <span id="minigun-time">10s</span></div>
+  <div style="width:220px; height:6px; background:rgba(0,0,0,0.5); border:1px solid rgba(255,100,0,0.4); border-radius:4px; overflow:hidden;">
+    <div id="minigun-fill" style="height:100%; width:100%; background:linear-gradient(90deg,#ff2200,#ff8800); transition:width 0.1s; border-radius:4px;"></div>
+  </div>
+</div>
+
+<div id="crosshair"><div class="crosshair-dot"></div></div>
+<div id="hit-flash"></div>
+<div id="time-up-flash"></div>
+<div id="kill-msg">+10 PTS</div>
+
+<div id="screen-overlay">
+  <!-- populated by buildMainMenu() on load -->
+</div>
+
+<!-- COOP HUD -->
+<div id="coop-hud">
+  <div class="coop-panel" id="coop-panel-p1">
+    <div style="display:flex;align-items:center;">
+      <div class="coop-player-label p1-label">P1</div>
+      <div class="coop-stat-row">
+        <div class="coop-stat">
+          <div class="coop-stat-val" id="cp1-score">0</div>
+          <div class="coop-stat-lbl">Puntos</div>
+        </div>
+        <div class="coop-stat">
+          <div class="coop-stat-val" id="cp1-kills">0<span style="font-size:12px;opacity:0.4">/100</span></div>
+          <div class="coop-stat-lbl">Patos</div>
+        </div>
+        <div class="coop-stat">
+          <div class="coop-ammo" id="cp1-ammo"></div>
+          <div class="coop-stat-lbl">Munición</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="coop-panel" id="coop-panel-p2">
+    <div style="display:flex;align-items:center;">
+      <div class="coop-player-label p2-label">P2</div>
+      <div class="coop-stat-row">
+        <div class="coop-stat">
+          <div class="coop-stat-val" id="cp2-score">0</div>
+          <div class="coop-stat-lbl">Puntos</div>
+        </div>
+        <div class="coop-stat">
+          <div class="coop-stat-val" id="cp2-kills">0<span style="font-size:12px;opacity:0.4">/100</span></div>
+          <div class="coop-stat-lbl">Patos</div>
+        </div>
+        <div class="coop-stat">
+          <div class="coop-ammo" id="cp2-ammo"></div>
+          <div class="coop-stat-lbl">Munición</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="coop-divider"></div>
+<div id="coop-timer">2:00</div>
+<div id="ch-p1" class="coop-crosshair"></div>
+<div id="ch-p2" class="coop-crosshair"></div>
+
+<div id="pause-overlay">
+  <div id="pause-bg"></div>
+  <div id="pause-panel">
+    <div class="pause-indicator">
+      <div class="pause-dot"></div>
+      Juego pausado
+    </div>
+    <h2>PAUSA</h2>
+    <div class="pause-sub">Presiona ESC para continuar</div>
+    <div class="pause-stats">
+      <div class="pause-stat">
+        <div class="pause-stat-val" id="pause-score">0</div>
+        <div class="pause-stat-lbl">Puntos</div>
+      </div>
+      <div class="pause-stat">
+        <div class="pause-stat-val" id="pause-killed">0</div>
+        <div class="pause-stat-lbl">Patos</div>
+      </div>
+      <div class="pause-stat">
+        <div class="pause-stat-val" id="pause-time">2:00</div>
+        <div class="pause-stat-lbl">Tiempo</div>
+      </div>
+    </div>
+    <div class="pause-btns">
+      <button class="pause-btn pause-btn-primary" onclick="resumeGame()">▶ CONTINUAR</button>
+      <button class="pause-btn pause-btn-secondary" onclick="restartFromPause()">↺ REINICIAR</button>
+      <button class="pause-btn pause-btn-danger" onclick="quitToMenu()">✕ SALIR AL MENÚ</button>
+    </div>
+    <div class="pause-hint">ESC · Reanudar</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─── AUDIO ───────────────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function getAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playShoot() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  // Main bang
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const dist = ctx.createWaveShaper();
+
+  // Distortion curve
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i * 2) / 256 - 1;
+    curve[i] = (Math.PI + 400) * x / (Math.PI + 400 * Math.abs(x));
+  }
+  dist.curve = curve;
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+
+  gain.gain.setValueAtTime(1.2, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+  osc.connect(dist);
+  dist.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.2);
+
+  // Noise burst (crack)
+  const bufSize = ctx.sampleRate * 0.08;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.6, t);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  noise.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(t);
+}
+
+function playReload() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  // Click 1 - eject
+  [0, 0.12, 0.28].forEach((delay, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(i === 2 ? 900 : 300 + i * 80, t + delay);
+    osc.frequency.exponentialRampToValueAtTime(i === 2 ? 1400 : 180, t + delay + 0.06);
+    g.gain.setValueAtTime(0.25, t + delay);
+    g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.07);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t + delay);
+    osc.stop(t + delay + 0.08);
+  });
+
+  // Metallic slide noise
+  const bufSize = ctx.sampleRate * 0.15;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 4000;
+  filter.Q.value = 0.5;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.3, t + 0.1);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  noise.connect(filter);
+  filter.connect(ng);
+  ng.connect(ctx.destination);
+  noise.start(t + 0.1);
+}
+
+function playJump() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, t);
+  osc.frequency.exponentialRampToValueAtTime(520, t + 0.18);
+  gain.gain.setValueAtTime(0.35, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.25);
+
+  // Soft thud
+  const osc2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(90, t);
+  osc2.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+  g2.gain.setValueAtTime(0.4, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  osc2.connect(g2);
+  g2.connect(ctx.destination);
+  osc2.start(t);
+  osc2.stop(t + 0.1);
+}
+
+let warningPlayed = false;
+function playTimerWarning() {
+  if (warningPlayed) return;
+  warningPlayed = true;
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  // Urgent beeping sequence
+  [0, 0.35, 0.7, 1.05, 1.4].forEach((delay) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, t + delay);
+    g.gain.setValueAtTime(0.0, t + delay);
+    g.gain.linearRampToValueAtTime(0.3, t + delay + 0.01);
+    g.gain.setValueAtTime(0.3, t + delay + 0.15);
+    g.gain.linearRampToValueAtTime(0.0, t + delay + 0.18);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t + delay);
+    osc.stop(t + delay + 0.2);
+  });
+
+  // Low bass hit on last beep
+  const bass = ctx.createOscillator();
+  const bg = ctx.createGain();
+  bass.type = 'sine';
+  bass.frequency.setValueAtTime(110, t + 1.4);
+  bass.frequency.exponentialRampToValueAtTime(55, t + 1.7);
+  bg.gain.setValueAtTime(0.5, t + 1.4);
+  bg.gain.exponentialRampToValueAtTime(0.001, t + 1.7);
+  bass.connect(bg);
+  bg.connect(ctx.destination);
+  bass.start(t + 1.4);
+  bass.stop(t + 1.8);
+}
+
+// ─── SETUP ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x87ceeb, 20, 120);
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 1.7, 0);
+
+// Hoisted so resize() can reference it
+let coopRunning = false;
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  if (coopRunning) {
+    const half = Math.floor(innerHeight / 2);
+    cam1.aspect = innerWidth / half;
+    cam1.updateProjectionMatrix();
+    cam2.aspect = innerWidth / half;
+    cam2.updateProjectionMatrix();
+  }
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── LIGHTS ──────────────────────────────────────────────────────────
+const sun = new THREE.DirectionalLight(0xfffbe6, 1.4);
+sun.position.set(30, 60, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.far = 200;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -60;
+sun.shadow.camera.right = sun.shadow.camera.top = 60;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xb0d8ff, 0.6));
+
+// ─── WORLD ───────────────────────────────────────────────────────────
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshLambertMaterial({ color: 0x5a9e3a })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Clouds
+for (let i = 0; i < 12; i++) {
+  const cloud = new THREE.Group();
+  for (let j = 0; j < 5; j++) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.random() * 3 + 2, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffffff })
+    );
+    m.position.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 4);
+    cloud.add(m);
+  }
+  cloud.position.set((Math.random() - 0.5) * 160, Math.random() * 15 + 15, (Math.random() - 0.5) * 160);
+  scene.add(cloud);
+}
+
+// Trees
+const treeMeshes = [];
+const SECRET_TREE_INDEX = Math.floor(Math.random() * 50);
+for (let i = 0; i < 50; i++) {
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.2, 0.3, 3, 6),
+    new THREE.MeshLambertMaterial({ color: 0x8B5E3C })
+  );
+  trunk.position.y = 1.5;
+  trunk.castShadow = true;
+  tree.add(trunk);
+  const leaves = new THREE.Mesh(
+    new THREE.SphereGeometry(2.5, 8, 6),
+    new THREE.MeshLambertMaterial({ color: 0x2d7a22 })
+  );
+  leaves.position.y = 5;
+  leaves.castShadow = true;
+  tree.add(leaves);
+  const angle = Math.random() * Math.PI * 2;
+  const dist = Math.random() * 60 + 15;
+  tree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+  tree.userData.isTree = true;
+  tree.userData.hits = 0;
+  tree.userData.isSecret = (i === SECRET_TREE_INDEX);
+  // Store refs to materials for hit feedback
+  tree.userData.trunkMat = trunk.material;
+  tree.userData.leavesMat = leaves.material;
+  scene.add(tree);
+  treeMeshes.push(tree);
+}
+
+// ─── GUN SYSTEM ──────────────────────────────────────────────────────
+const gunGroup = new THREE.Group();
+camera.add(gunGroup);
+scene.add(camera);
+
+// ── Shared helper: adds mesh to a target group ──
+function mkBox(grp, w, h, d, mat, px, py, pz, rx=0, ry=0, rz=0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(px, py, pz); m.rotation.set(rx, ry, rz);
+  grp.add(m); return m;
+}
+function mkCyl(grp, rt, rb, h, seg, mat, px, py, pz, rx=0, ry=0, rz=0) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+  m.position.set(px, py, pz); m.rotation.set(rx, ry, rz);
+  grp.add(m); return m;
+}
+
+// ─── AK-47 ───────────────────────────────────────────────────────────
+const akGroup = new THREE.Group();
+gunGroup.add(akGroup);
+
+const matMetal     = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+const matMetalMid  = new THREE.MeshLambertMaterial({ color: 0x2e2e2e });
+const matWood      = new THREE.MeshLambertMaterial({ color: 0x6b3a1f });
+const matWoodLight = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+const matMag       = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+mkBox(akGroup, 0.055, 0.075, 0.38, matMetalMid,  0,  0.01, -0.01);
+mkBox(akGroup, 0.052, 0.06,  0.30, matMetal,     0, -0.005, 0.00);
+mkBox(akGroup, 0.052, 0.012, 0.34, matMetal,     0,  0.055, -0.01);
+mkCyl(akGroup, 0.013, 0.013, 0.46, 8, matMetal,  0,  0.025, -0.30, Math.PI/2);
+mkCyl(akGroup, 0.018, 0.018, 0.06, 8, matMetal,  0,  0.025, -0.09, Math.PI/2);
+mkBox(akGroup, 0.022, 0.032, 0.025, matMetal,    0,  0.025, -0.50);
+mkBox(akGroup, 0.004, 0.028, 0.004, matMetal,    0,  0.048, -0.50);
+mkCyl(akGroup, 0.009, 0.009, 0.26, 6, matMetal,  0,  0.044, -0.22, Math.PI/2);
+mkCyl(akGroup, 0.019, 0.014, 0.018, 8, matMetal, 0,  0.025, -0.52, Math.PI/2);
+mkBox(akGroup, 0.050, 0.040, 0.22, matWood,      0, -0.012, -0.18);
+mkBox(akGroup, 0.046, 0.024, 0.20, matWoodLight, 0,  0.040, -0.18);
+mkBox(akGroup, 0.038, 0.065, 0.22, matWood,     -0.001, -0.006,  0.18);
+mkBox(akGroup, 0.034, 0.030, 0.18, matWoodLight, 0.001,  0.030,  0.17);
+mkBox(akGroup, 0.036, 0.075, 0.012, matMetal,   -0.001, -0.004,  0.29);
+mkBox(akGroup, 0.040, 0.095, 0.055, matWood,     0.000, -0.085,  0.095, 0.22);
+mkBox(akGroup, 0.038, 0.020, 0.050, matWood,     0.000, -0.130,  0.118);
+mkBox(akGroup, 0.008, 0.006, 0.075, matMetal,    0, -0.050,  0.045);
+mkBox(akGroup, 0.008, 0.006, 0.040, matMetal,    0, -0.075,  0.068, 0.5);
+mkBox(akGroup, 0.006, 0.022, 0.008, matMetal,    0, -0.058,  0.040, -0.2);
+for (let i = 0; i < 5; i++) {
+  const curve = Math.sin((i/4) * 0.6) * 0.018;
+  mkBox(akGroup, 0.036, 0.022, 0.045, matMag, 0, -0.058 - i*0.024, 0.038 - curve - i*0.008);
+}
+mkBox(akGroup, 0.034, 0.010, 0.060, matMetal, 0, -0.168, 0.018);
+mkBox(akGroup, 0.030, 0.022, 0.018, matMetal, 0,  0.064, -0.055);
+mkBox(akGroup, 0.004, 0.020, 0.004, matMetal, -0.012, 0.078, -0.060);
+mkBox(akGroup, 0.004, 0.020, 0.004, matMetal,  0.012, 0.078, -0.060);
+mkBox(akGroup, 0.010, 0.010, 0.028, matMetal,  0.040,  0.012, -0.060);
+mkCyl(akGroup, 0.007, 0.007, 0.012, 6, matMetal, 0.046, 0.012, -0.060, 0, 0, Math.PI/2);
+mkBox(akGroup, 0.006, 0.010, 0.032, matMetal,  0.032, -0.008, 0.025, 0, 0, 0.3);
+
+// ─── MINIGUN MODEL ───────────────────────────────────────────────────
+const mgGroup = new THREE.Group();
+mgGroup.visible = false;
+gunGroup.add(mgGroup);
+
+const matMgMetal  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+const matMgAccent = new THREE.MeshLambertMaterial({ color: 0xff5500, emissive: 0xff2200, emissiveIntensity: 0.4 });
+const matMgDark   = new THREE.MeshLambertMaterial({ color: 0x111111 });
+const matMgGrip   = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+
+// Central housing / body
+mkBox(mgGroup, 0.09, 0.09, 0.30, matMgMetal,   0,  0.00, -0.08);
+// Motor housing (back cylinder)
+mkCyl(mgGroup, 0.065, 0.065, 0.12, 12, matMgMetal, 0, 0.00, 0.10, Math.PI/2);
+// Front shroud
+mkCyl(mgGroup, 0.075, 0.080, 0.05, 12, matMgDark,  0, 0.00, -0.24, Math.PI/2);
+// Muzzle ring
+mkCyl(mgGroup, 0.068, 0.062, 0.025, 12, matMgAccent, 0, 0.00, -0.28, Math.PI/2);
+
+// 6 rotating barrels (stored for spin animation)
+const mgBarrels = [];
+const mgBarrelGroup = new THREE.Group();
+mgGroup.add(mgBarrelGroup);
+for (let i = 0; i < 6; i++) {
+  const angle = (i / 6) * Math.PI * 2;
+  const bGrp = new THREE.Group();
+  // Barrel tube
+  const bTube = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.016, 0.016, 0.38, 8),
+    matMgMetal
+  );
+  bTube.rotation.x = Math.PI / 2;
+  bTube.position.z = -0.05;
+  bGrp.add(bTube);
+  // Barrel tip flash hider
+  const bTip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.020, 0.013, 0.030, 8),
+    matMgAccent
+  );
+  bTip.rotation.x = Math.PI / 2;
+  bTip.position.z = -0.255;
+  bGrp.add(bTip);
+  // Barrel cooling shroud rings
+  for (let r = 0; r < 4; r++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.019, 0.006, 6, 10),
+      matMgDark
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.z = -0.04 - r * 0.07;
+    bGrp.add(ring);
+  }
+  bGrp.position.set(Math.cos(angle) * 0.046, Math.sin(angle) * 0.046, 0);
+  mgBarrelGroup.add(bGrp);
+  mgBarrels.push(bGrp);
+}
+
+// Ammo feed box
+mkBox(mgGroup, 0.055, 0.070, 0.14, matMgMetal,  0.00, -0.085, 0.04);
+mkBox(mgGroup, 0.050, 0.018, 0.10, matMgAccent, 0.00, -0.120, 0.04);
+
+// Handle / grip
+mkBox(mgGroup, 0.045, 0.10, 0.060, matMgGrip,   0.00, -0.100, 0.13, 0.2);
+mkBox(mgGroup, 0.042, 0.022, 0.055, matMgGrip,  0.00, -0.148, 0.150);
+
+// Trigger guard
+mkBox(mgGroup, 0.008, 0.006, 0.070, matMgMetal, 0, -0.055, 0.090);
+
+// Side carrying handle
+mkBox(mgGroup, 0.008, 0.035, 0.12, matMgMetal,  0.052, 0.065, 0.03);
+mkBox(mgGroup, 0.008, 0.010, 0.12, matMgMetal,  0.052, 0.082, 0.03);
+
+// Rear sight bump
+mkBox(mgGroup, 0.030, 0.018, 0.018, matMgDark,  0, 0.055, 0.06);
+
+// Muzzle flash holder (glowing)
+const muzzleGlow = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.015, 0.015, 0.018, 8),
+  new THREE.MeshLambertMaterial({ color: 0xffff00, emissive: 0xffaa00, emissiveIntensity: 1.0 })
+);
+muzzleGlow.rotation.x = Math.PI / 2;
+muzzleGlow.position.set(0, 0.00, -0.295);
+muzzleGlow.visible = false;
+mgGroup.add(muzzleGlow);
+
+// ── Gun swap functions ────────────────────────────────────────────────
+function equipAK() {
+  akGroup.visible = true;
+  mgGroup.visible = false;
+  gunGroup.position.set(0.18, -0.24, -0.38);
+  gunGroup.rotation.set(0.04, 0.06, 0.0);
+}
+function equipMinigun() {
+  akGroup.visible = false;
+  mgGroup.visible = true;
+  gunGroup.position.set(0.20, -0.22, -0.36);
+  gunGroup.rotation.set(0.02, 0.05, 0.0);
+}
+equipAK();
+
+
+// ─── DUCKS ───────────────────────────────────────────────────────────
+function createDuck() {
+  const duck = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0xffd700 })
+  );
+  body.scale.set(1.2, 0.8, 1.0);
+  duck.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.25, 10, 8),
+    new THREE.MeshLambertMaterial({ color: 0x228b22 })
+  );
+  head.position.set(0, 0.4, 0.4);
+  duck.add(head);
+
+  const bill = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.08, 0.25),
+    new THREE.MeshLambertMaterial({ color: 0xff8c00 })
+  );
+  bill.position.set(0, 0.38, 0.68);
+  duck.add(bill);
+
+  // Eye
+  const eye = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 6, 6),
+    new THREE.MeshLambertMaterial({ color: 0x000000 })
+  );
+  eye.position.set(0.14, 0.5, 0.56);
+  duck.add(eye);
+
+  // Wings
+  for (let s of [-1, 1]) {
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.25, 0.45),
+      new THREE.MeshLambertMaterial({ color: 0xffa500 })
+    );
+    wing.position.set(s * 0.45, 0.05, 0);
+    wing.name = 'wing_' + (s > 0 ? 'r' : 'l');
+    duck.add(wing);
+  }
+
+  // Collision sphere helper (invisible)
+  duck.userData.radius = 0.6;
+
+  return duck;
+}
+
+const ducks = [];
+const TOTAL_DUCKS = 100;
+
+function spawnDuck() {
+  const duck = createDuck();
+  const angle = Math.random() * Math.PI * 2;
+  const dist = Math.random() * 30 + 15;
+  duck.position.set(
+    Math.cos(angle) * dist,
+    Math.random() * 10 + 3,
+    Math.sin(angle) * dist
+  );
+  const speed = (Math.random() * 0.04 + 0.02);
+  const flyDir = new THREE.Vector3(
+    (Math.random() - 0.5),
+    (Math.random() - 0.5) * 0.2,
+    (Math.random() - 0.5)
+  ).normalize().multiplyScalar(speed);
+  duck.userData = {
+    velocity: flyDir,
+    wingPhase: Math.random() * Math.PI * 2,
+    radius: 0.6,
+    alive: true
+  };
+  duck.userData.id = ducks.length;
+  scene.add(duck);
+  ducks.push(duck);
+}
+
+// ─── GAME STATE ──────────────────────────────────────────────────────
+let gameRunning = false;
+let gamePaused = false;
+let score = 0;
+let killed = 0;
+let ducksSpawned = 0;
+let ammo = 6;
+const MAX_AMMO = 6;
+let reloading = false;
+let reloadTimer = 0;
+let timeLeft = 120; // 2 minutes in seconds
+
+// ─── MINIGUN STATE ────────────────────────────────────────────────────
+let hasMinigun = false;
+let minigunTimer = 0;
+let minigunFireTimer = 0;
+const MINIGUN_DURATION = 10;
+const MINIGUN_FIRERATE = 0.06; // seconds between shots
+const orbs = []; // { mesh, pos, baseY }
+
+// ─── INPUT ───────────────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Escape' && gameRunning) {
+    gamePaused ? resumeGame() : pauseGame();
+    return;
+  }
+  keys[e.code] = true;
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+const yaw = new THREE.Euler(0, 0, 0, 'YXZ');
+let pitch = 0, rotY = 0;
+
+canvas.addEventListener('click', e => {
+  if (!gameRunning) return;
+  if (e.button === 0) shoot();
+});
+
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (gameRunning) reload();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!gameRunning) return;
+  const sens = 0.002;
+  rotY -= e.movementX * sens;
+  pitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch - e.movementY * sens));
+});
+
+canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+canvas.addEventListener('click', () => {
+  if (gameRunning) canvas.requestPointerLock();
+});
+
+// ─── AMMO UI ─────────────────────────────────────────────────────────
+function updateAmmoUI() {
+  const display = document.getElementById('ammo-display');
+  display.innerHTML = '';
+  for (let i = 0; i < MAX_AMMO; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'ammo-pip' + (i >= ammo ? ' empty' : '');
+    display.appendChild(pip);
+  }
+}
+updateAmmoUI();
+
+// ─── MINIGUN SOUNDS ───────────────────────────────────────────────────
+function playMinigunShot() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(120, t);
+  osc.frequency.exponentialRampToValueAtTime(50, t + 0.05);
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  const dist = ctx.createWaveShaper();
+  const curve = new Float32Array(128);
+  for (let i = 0; i < 128; i++) { const x = (i*2)/128-1; curve[i]=(Math.PI+300)*x/(Math.PI+300*Math.abs(x)); }
+  dist.curve = curve;
+  osc.connect(dist); dist.connect(g); g.connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.07);
+  // Crack
+  const nb = ctx.createBuffer(1, ctx.sampleRate*0.04, ctx.sampleRate);
+  const nd = nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1);
+  const ns = ctx.createBufferSource(); ns.buffer = nb;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.3, t); ng.gain.exponentialRampToValueAtTime(0.001, t+0.04);
+  ns.connect(ng); ng.connect(ctx.destination); ns.start(t);
+}
+
+function playPickupOrb() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  [0, 0.1, 0.2].forEach((d, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440 + i*220, t+d);
+    osc.frequency.exponentialRampToValueAtTime(880 + i*220, t+d+0.12);
+    g.gain.setValueAtTime(0.3, t+d);
+    g.gain.exponentialRampToValueAtTime(0.001, t+d+0.15);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t+d); osc.stop(t+d+0.16);
+  });
+}
+
+function playMinigunEnd() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(200, t);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.5);
+  g.gain.setValueAtTime(0.4, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.55);
+}
+
+// ─── ORB CREATION ────────────────────────────────────────────────────
+function createOrb(pos) {
+  const orbGroup = new THREE.Group();
+  orbGroup.position.copy(pos);
+  orbGroup.position.y = 0.8;
+
+  // Glowing sphere core
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 16, 12),
+    new THREE.MeshLambertMaterial({ color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 0.8 })
+  );
+  orbGroup.add(core);
+
+  // Outer ring 1
+  const ring1 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.42, 0.04, 8, 24),
+    new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff6600, emissiveIntensity: 0.6 })
+  );
+  orbGroup.add(ring1);
+
+  // Outer ring 2 (perpendicular)
+  const ring2 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.42, 0.04, 8, 24),
+    new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff6600, emissiveIntensity: 0.6 })
+  );
+  ring2.rotation.x = Math.PI / 2;
+  orbGroup.add(ring2);
+
+  // Minigun icon barrels (tiny cylinders around core)
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.03, 0.22, 6),
+      new THREE.MeshLambertMaterial({ color: 0x555555 })
+    );
+    barrel.position.set(Math.cos(angle) * 0.14, 0, Math.sin(angle) * 0.14);
+    orbGroup.add(barrel);
+  }
+
+  // Point light for glow effect
+  const light = new THREE.PointLight(0xff4400, 1.5, 6);
+  orbGroup.add(light);
+
+  orbGroup.userData.baseY = orbGroup.position.y;
+  orbGroup.userData.ring1 = ring1;
+  orbGroup.userData.ring2 = ring2;
+  orbGroup.userData.light = light;
+
+  scene.add(orbGroup);
+  orbs.push(orbGroup);
+}
+
+// ─── MINIGUN UI ───────────────────────────────────────────────────────
+function updateMinigunUI() {
+  let bar = document.getElementById('minigun-bar');
+  if (!bar) return;
+  if (!hasMinigun) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const pct = (minigunTimer / MINIGUN_DURATION) * 100;
+  document.getElementById('minigun-fill').style.width = pct + '%';
+  document.getElementById('minigun-time').textContent = Math.ceil(minigunTimer) + 's';
+}
+
+// ─── SHOOT ───────────────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+
+function shoot() {
+  if (ammo <= 0 || reloading) return;
+  ammo--;
+  updateAmmoUI();
+
+  // gun kick animation
+  gsap_kickGun();
+  playShoot();
+
+  // Raycast from center of screen
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+  // Check each duck
+  let hit = null;
+  let closestDist = Infinity;
+
+  for (const duck of ducks) {
+    if (!duck.userData.alive) continue;
+    const sphere = new THREE.Sphere(duck.position, duck.userData.radius);
+    const pt = new THREE.Vector3();
+    if (raycaster.ray.intersectSphere(sphere, pt)) {
+      const d = camera.position.distanceTo(duck.position);
+      if (d < closestDist) { closestDist = d; hit = duck; }
+    }
+  }
+
+  if (hit) {
+    killDuck(hit);
+  }
+
+  // Check tree hits
+  if (!hit) {
+    // Build list of all tree child meshes for intersection
+    const treeParts = [];
+    for (const t of treeMeshes) treeParts.push(...t.children);
+    const treeHits = raycaster.intersectObjects(treeParts);
+    if (treeHits.length > 0) {
+      // Find parent tree group
+      const hitMesh = treeHits[0].object;
+      const parentTree = treeMeshes.find(t => t.children.includes(hitMesh));
+      if (parentTree) hitTree(parentTree);
+    }
+  }
+
+  if (ammo === 0) setTimeout(reload, 300);
+}
+
+let gunKickTimer = 0;
+function gsap_kickGun() {
+  gunKickTimer = 0.15;
+}
+
+// ─── TREE HIT ────────────────────────────────────────────────────────
+function hitTree(tree) {
+  if (!tree.userData.isSecret || tree.userData.hits >= 3) return;
+  tree.userData.hits++;
+
+  // Flash the tree white briefly
+  tree.userData.leavesMat.color.set(0xffffff);
+  tree.userData.trunkMat.color.set(0xffffff);
+  setTimeout(() => {
+    const h = tree.userData.hits;
+    // Color shifts: green → yellow → orange → gone
+    const leafColors = [0x2d7a22, 0xd4a017, 0xff6600];
+    tree.userData.leavesMat.color.set(leafColors[h - 1] || 0x2d7a22);
+    tree.userData.trunkMat.color.set(0x8B5E3C);
+  }, 80);
+
+  // Show hit counter message
+  const msg = document.getElementById('kill-msg');
+  const remaining = 3 - tree.userData.hits;
+  if (remaining > 0) {
+    msg.style.color = '#aaffaa';
+    msg.style.textShadow = '0 0 20px #00ff88';
+    msg.textContent = `🌲 ${remaining} impacto${remaining > 1 ? 's' : ''} más...`;
+    msg.style.opacity = '1';
+    msg.style.transform = 'translateY(-8px)';
+    setTimeout(() => {
+      msg.style.opacity = '0';
+      msg.style.transform = 'translateY(0)';
+      msg.style.color = '#ff6b35';
+      msg.style.textShadow = '0 0 10px #ff6b35';
+      msg.textContent = '+10 PTS';
+    }, 800);
+  }
+
+  if (tree.userData.hits >= 3) {
+    // Shake and fall the tree
+    let shake = 0;
+    const shakeInterval = setInterval(() => {
+      shake += 0.3;
+      tree.rotation.z = Math.sin(shake) * 0.15;
+      if (shake > 5) {
+        clearInterval(shakeInterval);
+        tree.rotation.z = 0;
+      }
+    }, 30);
+
+    setTimeout(() => {
+      window.open('https://youtu.be/dQw4w9WgXcQ?si=aoGkdYyo-xSZ2HKr', '_blank');
+    }, 500);
+  }
+}
+
+function reload() {
+  if (reloading || ammo === MAX_AMMO) return;
+  reloading = true;
+  reloadTimer = 1.2;
+  playReload();
+}
+
+function killDuck(duck) {
+  duck.userData.alive = false;
+  killed++;
+  score += 10;
+
+  document.getElementById('score').textContent = score;
+  document.getElementById('killed').textContent = killed;
+  document.getElementById('progress-fill').style.width = (score / 1000 * 100) + '%';
+
+  // Flash
+  const flash = document.getElementById('hit-flash');
+  flash.style.opacity = '1';
+  setTimeout(() => flash.style.opacity = '0', 80);
+
+  // Kill message
+  const msg = document.getElementById('kill-msg');
+  msg.style.opacity = '1';
+  msg.style.transform = 'translateY(-8px)';
+  setTimeout(() => {
+    msg.style.opacity = '0';
+    msg.style.transform = 'translateY(0)';
+  }, 600);
+
+  // Death animation - duck falls
+  duck.userData.velocity.y = -0.05;
+  duck.userData.velocity.x *= 0.5;
+  duck.userData.velocity.z *= 0.5;
+  duck.userData.dying = true;
+  duck.userData.dyingTimer = 1.2;
+
+  // Spawn feather particles
+  spawnFeathers(duck.position.clone());
+
+  // Random orb drop (25% chance, only if no orb exists and not already having minigun)
+  if (!hasMinigun && orbs.length === 0 && Math.random() < 0.03) {
+    createOrb(duck.position.clone());
+  }
+
+  // Check win/lose
+  if (killed === TOTAL_DUCKS) endGame('complete');
+}
+
+// ─── FEATHERS ────────────────────────────────────────────────────────
+const feathers = [];
+function spawnFeathers(pos) {
+  for (let i = 0; i < 8; i++) {
+    const f = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.15, 0.25),
+      new THREE.MeshLambertMaterial({ color: 0xffd700, side: THREE.DoubleSide })
+    );
+    f.position.copy(pos);
+    const v = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.15,
+      Math.random() * 0.1 + 0.05,
+      (Math.random() - 0.5) * 0.15
+    );
+    feathers.push({ mesh: f, vel: v, life: 1.5 });
+    scene.add(f);
+  }
+}
+
+// ─── TIMER UI ────────────────────────────────────────────────────────
+function updateTimerUI() {
+  const mins = Math.floor(timeLeft / 60);
+  const secs = Math.floor(timeLeft % 60);
+  const display = document.getElementById('timer-display');
+  const box = document.getElementById('timer-box');
+  display.textContent = mins + ':' + String(secs).padStart(2, '0');
+
+  const isWarning = timeLeft <= 30;
+  display.className = 'stat-value' + (isWarning ? ' warning' : '');
+  box.className = 'stat-box' + (isWarning ? ' warning' : '');
+
+  // Play warning sound once at 30s
+  if (timeLeft <= 30 && timeLeft > 29.5) playTimerWarning();
+
+  // Red flash every second when <= 10s
+  if (timeLeft <= 10 && timeLeft > 0) {
+    const flash = document.getElementById('time-up-flash');
+    flash.style.opacity = '1';
+    setTimeout(() => flash.style.opacity = '0', 150);
+  }
+}
+
+
+const clock = new THREE.Clock();
+let spawnInterval = 0;
+const GROUND_Y = 1.7;
+let velY = 0;
+let isGrounded = true;
+
+// ─── DASH ─────────────────────────────────────────────────────────────
+let dashVel = new THREE.Vector3();
+let dashTimer = 0;
+let dashCooldown = 0;
+const DASH_DURATION = 0.18;
+const DASH_SPEED = 28;
+const DASH_COOLDOWN = 1.0;
+
+function playDash() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  // Whoosh: filtered noise sweep
+  const bufSize = ctx.sampleRate * 0.25;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(400, t);
+  filter.frequency.exponentialRampToValueAtTime(3200, t + 0.12);
+  filter.frequency.exponentialRampToValueAtTime(600, t + 0.25);
+  filter.Q.value = 1.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0, t);
+  g.gain.linearRampToValueAtTime(0.5, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  noise.connect(filter);
+  filter.connect(g);
+  g.connect(ctx.destination);
+  noise.start(t);
+
+  // Sharp pitch blip
+  const osc = ctx.createOscillator();
+  const og = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(600, t);
+  osc.frequency.exponentialRampToValueAtTime(150, t + 0.15);
+  og.gain.setValueAtTime(0.25, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(og);
+  og.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.16);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && isGrounded && gameRunning) {
+    velY = 8;
+    isGrounded = false;
+    playJump();
+    e.preventDefault();
+  }
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && gameRunning && dashCooldown <= 0) {
+    // Dash in movement direction, or forward if standing still
+    const dir = new THREE.Vector3();
+    if (keys['KeyW'] || keys['ArrowUp'])    dir.z -= 1;
+    if (keys['KeyS'] || keys['ArrowDown'])  dir.z += 1;
+    if (keys['KeyA'] || keys['ArrowLeft'])  dir.x -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dir.x += 1;
+    if (dir.length() === 0) dir.z = -1; // default: forward
+    dir.normalize().applyEuler(new THREE.Euler(0, rotY, 0));
+    dashVel.copy(dir.multiplyScalar(DASH_SPEED));
+    dashTimer = DASH_DURATION;
+    dashCooldown = DASH_COOLDOWN;
+    playDash();
+    // FOV kick
+    camera.fov = 95;
+    camera.updateProjectionMatrix();
+    // Screen vignette flash
+    const flash = document.getElementById('hit-flash');
+    flash.style.background = 'rgba(180,220,255,0.18)';
+    flash.style.opacity = '1';
+    setTimeout(() => {
+      flash.style.opacity = '0';
+      flash.style.background = 'rgba(255,255,100,0.3)';
+    }, 120);
+    e.preventDefault();
+  }
+});
+
+function update(dt) {
+  if (activeMode !== 'solo' || gamePaused) return;
+  updateGamepadSolo(dt);
+
+  // Player movement
+  const move = new THREE.Vector3();
+  if (keys['KeyW'] || keys['ArrowUp'])    move.z -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  move.z += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  move.x -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) move.x += 1;
+  if (move.length() > 0) {
+    move.normalize().multiplyScalar(dt * 8);
+    move.applyEuler(new THREE.Euler(0, rotY, 0));
+    camera.position.add(move);
+    // Bound
+    camera.position.x = Math.max(-60, Math.min(60, camera.position.x));
+    camera.position.z = Math.max(-60, Math.min(60, camera.position.z));
+  }
+
+  // Dash
+  if (dashCooldown > 0) dashCooldown -= dt;
+  if (dashTimer > 0) {
+    dashTimer -= dt;
+    const t2 = Math.max(0, dashTimer / DASH_DURATION);
+    camera.position.addScaledVector(dashVel, dt * t2);
+    camera.position.x = Math.max(-60, Math.min(60, camera.position.x));
+    camera.position.z = Math.max(-60, Math.min(60, camera.position.z));
+    // Restore FOV smoothly
+    camera.fov = 75 + (dashTimer / DASH_DURATION) * 20;
+    camera.updateProjectionMatrix();
+  } else if (camera.fov !== 75) {
+    camera.fov = 75;
+    camera.updateProjectionMatrix();
+  }
+
+  // Jump / gravity
+  velY -= 22 * dt;
+  camera.position.y += velY * dt;
+  if (camera.position.y <= GROUND_Y) {
+    camera.position.y = GROUND_Y;
+    velY = 0;
+    isGrounded = true;
+  }
+
+  // Camera rotation
+  yaw.set(pitch, rotY, 0);
+  camera.quaternion.setFromEuler(yaw);
+
+  // Gun kick
+  if (gunKickTimer > 0) {
+    gunKickTimer -= dt;
+    const k = Math.max(0, gunKickTimer / 0.15);
+    gunGroup.position.z = -0.38 + k * 0.07;
+    gunGroup.rotation.x = 0.04 - k * 0.12;
+  } else {
+    gunGroup.position.z = -0.38;
+    gunGroup.rotation.x = 0.04;
+  }
+
+  // Minigun barrel spin
+  if (hasMinigun) {
+    mgBarrelGroup.rotation.z += dt * 18;
+    muzzleGlow.visible = minigunFireTimer < 0.03;
+  } else {
+    muzzleGlow.visible = false;
+  }
+
+  // Timer countdown
+  timeLeft -= dt;
+  updateTimerUI();
+  if (timeLeft <= 0) {
+    timeLeft = 0;
+    endGame('timeout');
+    return;
+  }
+
+  // Reload
+  if (reloading) {
+    reloadTimer -= dt;
+    if (reloadTimer <= 0) {
+      ammo = MAX_AMMO;
+      reloading = false;
+      updateAmmoUI();
+    }
+  }
+
+  // Spawn ducks
+  if (ducksSpawned < TOTAL_DUCKS) {
+    spawnInterval -= dt;
+    if (spawnInterval <= 0) {
+      spawnDuck();
+      ducksSpawned++;
+      spawnInterval = 0.8;
+    }
+  }
+
+  // Update ducks
+  const t = clock.getElapsedTime();
+  for (const duck of ducks) {
+    if (!duck.userData.alive && !duck.userData.dying) continue;
+
+    if (duck.userData.dying) {
+      duck.userData.dyingTimer -= dt;
+      duck.userData.velocity.y -= 0.003;
+      duck.position.add(duck.userData.velocity);
+      duck.rotation.z += 0.1;
+      if (duck.userData.dyingTimer <= 0 || duck.position.y < -5) {
+        scene.remove(duck);
+        duck.userData.dying = false;
+      }
+      continue;
+    }
+
+    // Wing flap
+    const phase = duck.userData.wingPhase + t * 8;
+    for (const child of duck.children) {
+      if (child.name === 'wing_r') child.rotation.z = Math.sin(phase) * 0.6;
+      if (child.name === 'wing_l') child.rotation.z = -Math.sin(phase) * 0.6;
+    }
+
+    // Move
+    duck.position.add(duck.userData.velocity);
+
+    // Slight bobbing
+    duck.position.y += Math.sin(t * 3 + duck.userData.wingPhase) * 0.005;
+
+    // Face direction of movement
+    const vel = duck.userData.velocity;
+    if (vel.length() > 0) {
+      duck.rotation.y = Math.atan2(vel.x, vel.z);
+    }
+
+    // Bounce off world bounds
+    if (Math.abs(duck.position.x) > 55) duck.userData.velocity.x *= -1;
+    if (Math.abs(duck.position.z) > 55) duck.userData.velocity.z *= -1;
+    if (duck.position.y > 20) duck.userData.velocity.y *= -1;
+    if (duck.position.y < 2) duck.userData.velocity.y = Math.abs(duck.userData.velocity.y);
+  }
+
+  // ── Update orbs (float + rotate + pickup check) ─────────────────────
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const orb = orbs[i];
+    orb.position.y = orb.userData.baseY + Math.sin(t * 2.5 + i) * 0.18;
+    orb.rotation.y += dt * 1.8;
+    orb.userData.ring1.rotation.x += dt * 2.2;
+    orb.userData.ring2.rotation.z += dt * 1.6;
+    orb.userData.light.intensity = 1.2 + Math.sin(t * 4) * 0.4;
+
+    // Pickup check - player walks over it
+    const dx = camera.position.x - orb.position.x;
+    const dz = camera.position.z - orb.position.z;
+    if (Math.sqrt(dx*dx + dz*dz) < 1.4) {
+      scene.remove(orb);
+      orbs.splice(i, 1);
+      hasMinigun = true;
+      minigunTimer = MINIGUN_DURATION;
+      minigunFireTimer = 0;
+      playPickupOrb();
+      equipMinigun();
+      updateMinigunUI();
+
+      // Show pickup message
+      const msg = document.getElementById('kill-msg');
+      msg.style.color = '#ff8800';
+      msg.style.textShadow = '0 0 20px #ff4400';
+      msg.textContent = '🔥 MINIGUN!';
+      msg.style.opacity = '1';
+      msg.style.transform = 'translateY(-8px)';
+      setTimeout(() => {
+        msg.style.opacity = '0';
+        msg.style.transform = 'translateY(0)';
+        msg.style.color = '#ff6b35';
+        msg.style.textShadow = '0 0 10px #ff6b35';
+        msg.textContent = '+10 PTS';
+      }, 1200);
+    }
+  }
+
+  // ── Minigun auto-fire ────────────────────────────────────────────────
+  if (hasMinigun) {
+    minigunTimer -= dt;
+    updateMinigunUI();
+    if (minigunTimer <= 0) {
+      hasMinigun = false;
+      minigunTimer = 0;
+      updateMinigunUI();
+      equipAK();
+      playMinigunEnd();
+    } else {
+      minigunFireTimer -= dt;
+      if (minigunFireTimer <= 0) {
+        minigunFireTimer = MINIGUN_FIRERATE;
+        // Auto-shoot without consuming ammo
+        playMinigunShot();
+        gsap_kickGun();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+        let hit = null, closestDist = Infinity;
+        for (const duck of ducks) {
+          if (!duck.userData.alive) continue;
+          const sphere = new THREE.Sphere(duck.position, duck.userData.radius);
+          const pt = new THREE.Vector3();
+          if (raycaster.ray.intersectSphere(sphere, pt)) {
+            const d = camera.position.distanceTo(duck.position);
+            if (d < closestDist) { closestDist = d; hit = duck; }
+          }
+        }
+        if (hit) killDuck(hit);
+      }
+    }
+  }
+
+  // Update feathers
+  for (let i = feathers.length - 1; i >= 0; i--) {
+    const f = feathers[i];
+    f.life -= dt;
+    f.vel.y -= 0.004;
+    f.mesh.position.add(f.vel);
+    f.mesh.rotation.z += 0.08;
+    f.mesh.material.opacity = Math.max(0, f.life / 1.5);
+    f.mesh.material.transparent = true;
+    if (f.life <= 0) {
+      scene.remove(f.mesh);
+      feathers.splice(i, 1);
+    }
+  }
+}
+
+// ── Single source of truth for active mode ────────────────────────
+// Values: 'none' | 'solo' | 'coop'
+let activeMode = 'none';
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (activeMode === 'coop') {
+    updateCoop(dt);
+    renderCoop();
+  } else if (activeMode === 'solo') {
+    update(dt);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, innerWidth, innerHeight);
+    renderer.render(scene, camera);
+  } else {
+    // Menu — just render the scene quietly
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, innerWidth, innerHeight);
+    renderer.render(scene, camera);
+  }
+}
+animate();
+
+// ─── PAUSE ───────────────────────────────────────────────────────────
+function pauseGame() {
+  gamePaused = true;
+  document.exitPointerLock && document.exitPointerLock();
+  // Update pause stats
+  document.getElementById('pause-score').textContent = score;
+  document.getElementById('pause-killed').textContent = killed;
+  document.getElementById('pause-time').textContent = document.getElementById('timer-display').textContent;
+  const p = document.getElementById('pause-overlay');
+  p.style.display = 'flex';
+  // Re-trigger panel animation
+  const panel = document.getElementById('pause-panel');
+  panel.style.animation = 'none';
+  panel.offsetHeight; // reflow
+  panel.style.animation = '';
+}
+
+function resumeGame() {
+  gamePaused = false;
+  document.getElementById('pause-overlay').style.display = 'none';
+  canvas.requestPointerLock();
+}
+
+function restartFromPause() {
+  document.getElementById('pause-overlay').style.display = 'none';
+  if (activeMode === 'coop') startCoop();
+  else startGame();
+}
+
+// ─── SCOREBOARD ──────────────────────────────────────────────────────
+const SCORE_KEY = 'duckhunt3d_scores';
+
+function saveScore(pts, kills, timeUsed, mode) {
+  const scores = loadScores();
+  scores.push({
+    pts, kills,
+    time: Math.floor(timeUsed),
+    mode: mode || 'solo',
+    date: new Date().toLocaleDateString('es-UY', { day:'2-digit', month:'2-digit', year:'2-digit' })
+  });
+  scores.sort((a, b) => b.pts - a.pts);
+  const top = scores.slice(0, 10);
+  try { localStorage.setItem(SCORE_KEY, JSON.stringify(top)); } catch(e) {}
+  return top;
+}
+
+function loadScores() {
+  try { return JSON.parse(localStorage.getItem(SCORE_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function clearScores() {
+  try { localStorage.removeItem(SCORE_KEY); } catch(e) {}
+}
+
+function renderScoreboard() {
+  const scores = loadScores();
+  if (scores.length === 0) {
+    return `<div style="text-align:center;color:rgba(255,255,255,0.2);font-size:10px;letter-spacing:3px;padding:24px 0;font-family:'Inter',sans-serif;">SIN PARTIDAS AÚN</div>`;
+  }
+  return scores.map((s, i) => {
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:'Inter',sans-serif">#${i+1}</span>`;
+    const modeColor = s.mode === 'coop' ? '#44aaff' : '#ffcc02';
+    const modeLabel = s.mode === 'coop' ? 'CO' : 'S1';
+    const mins = Math.floor(s.time / 60), secs = s.time % 60;
+    return `
+      <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:5px;background:${i===0?'rgba(255,200,0,0.06)':'rgba(255,255,255,0.02)'}; ${i===0?'border:1px solid rgba(255,200,0,0.12);':'border:1px solid transparent;'}">
+        <div style="width:20px;text-align:center;font-size:12px;line-height:1;">${medal}</div>
+        <div style="flex:1;font-family:'Bebas Neue',sans-serif;font-size:18px;color:${i===0?'#ffcc02':'#fff'};letter-spacing:1px;line-height:1;">${s.pts}<span style="font-size:10px;color:rgba(255,255,255,0.25);font-family:'Inter',sans-serif;margin-left:2px;">pts</span></div>
+        <div style="font-size:8px;color:rgba(255,255,255,0.28);font-family:'Inter',sans-serif;">${s.kills}🦆</div>
+        <div style="font-size:8px;color:rgba(255,255,255,0.28);font-family:'Inter',sans-serif;">${mins}:${String(secs).padStart(2,'0')}</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:1px;color:${modeColor};padding:2px 4px;border:1px solid ${modeColor}44;border-radius:3px;font-family:'Inter',sans-serif;">${modeLabel}</div>
+      </div>`;
+  }).join('');
+}
+
+// ─── MAIN MENU BUILDER ────────────────────────────────────────────────
+function buildMainMenu() {
+  const overlay = document.getElementById('screen-overlay');
+  overlay.style.display = 'flex';
+  const hasScores = loadScores().length > 0;
+  overlay.innerHTML = `
+    <div id="overlay-bg"></div>
+    <div id="overlay-grid"></div>
+    <div id="overlay-scan"></div>
+    <div id="overlay-vignette"></div>
+    <div id="overlay-content" style="flex-direction:row;gap:32px;align-items:center;padding:28px 40px;max-width:960px;width:100%;">
+
+      <!-- ── LEFT COLUMN ── -->
+      <div style="display:flex;flex-direction:column;align-items:flex-start;flex:1;min-width:0;">
+
+        <div style="font-family:'Inter',sans-serif;font-size:9px;letter-spacing:5px;color:rgba(255,200,0,0.5);margin-bottom:6px;font-weight:600;">EDICIÓN ARCADE · 2026</div>
+
+        <div style="font-family:'Bebas Neue',sans-serif;line-height:0.85;margin-bottom:4px;">
+          <div style="font-size:72px;color:#fff;letter-spacing:4px;">DUCK</div>
+          <div style="font-size:72px;color:#ffcc02;letter-spacing:4px;text-shadow:0 0 40px rgba(255,200,0,0.4);">HUNT</div>
+        </div>
+        <div style="font-family:'Inter',sans-serif;font-size:9px;letter-spacing:6px;color:rgba(255,255,255,0.3);margin-bottom:18px;">3D · FIRST PERSON SHOOTER</div>
+
+        <!-- Stats row -->
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          ${[['🦆','100','Patos'],['🎯','600','Mín. pts'],['⏱️','2:00','Tiempo'],['🔫','6','Balas']].map(([icon,val,lbl])=>`
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:6px 10px;text-align:center;">
+            <div style="font-size:13px;">${icon}</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:#fff;letter-spacing:1px;">${val}</div>
+            <div style="font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.3);font-family:'Inter',sans-serif;text-transform:uppercase;">${lbl}</div>
+          </div>`).join('')}
+        </div>
+
+        <!-- Controls (compact 2-col grid) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-bottom:14px;">
+          ${[['WASD','Mover'],['CLICK','Disparar'],['ESPACIO','Saltar'],['SHIFT','Dash'],['CLICK DER','Recargar'],['ESC','Pausa']].map(([k,a])=>`
+          <div style="display:flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;font-size:10px;color:rgba(255,255,255,0.45);">
+            <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:2px 7px;font-size:9px;letter-spacing:1px;color:#fff;font-family:'Inter',sans-serif;">${k}</kbd>${a}
+          </div>`).join('')}
+        </div>
+
+        <!-- PS5 hint compact -->
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:16px;padding:6px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:1px;font-family:'Inter',sans-serif;">
+          <span>🎮</span><span>PS5 · <span style="color:rgba(255,204,2,0.5)">L✦ MOV · R✦ MIRA · R2 DISP · ✕ SALTO · □ DASH · ○ REC</span></span>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex;gap:10px;margin-bottom:8px;width:100%;">
+          <button onclick="startGame()" style="flex:1;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:4px;padding:12px 0;background:#ffcc02;color:#000;border:none;border-radius:6px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 24px rgba(255,200,0,0.4)'" onmouseout="this.style.transform='';this.style.boxShadow=''">▶ UN JUGADOR</button>
+          <button onclick="startCoop()" style="flex:1;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:4px;padding:12px 0;background:transparent;color:#4af;border:2px solid rgba(64,170,255,0.5);border-radius:6px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 24px rgba(64,170,255,0.25)';this.style.background='rgba(64,170,255,0.08)'" onmouseout="this.style.transform='';this.style.boxShadow='';this.style.background='transparent'">👥 COOP</button>
+        </div>
+        <div style="font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.18);font-family:'Inter',sans-serif;">COOP: P1 WASD+CLICK · P2 IJKL+U</div>
+
+      </div>
+
+      <!-- ── RIGHT COLUMN — SCOREBOARD ── -->
+      <div style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:0;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.07);border-radius:10px;overflow:hidden;align-self:stretch;">
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:5px;color:rgba(255,255,255,0.55);">🏆 PUNTAJES</div>
+          ${hasScores ? `<button onclick="clearScores();buildMainMenu();" style="background:none;border:1px solid rgba(255,80,80,0.2);color:rgba(255,80,80,0.45);font-family:'Inter',sans-serif;font-size:8px;letter-spacing:2px;padding:3px 8px;border-radius:4px;cursor:pointer;" onmouseover="this.style.color='rgba(255,100,100,0.9)'" onmouseout="this.style.color='rgba(255,80,80,0.45)'">BORRAR</button>` : ''}
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:3px;">
+          ${renderScoreboard()}
+        </div>
+
+        <div style="padding:8px 14px;border-top:1px solid rgba(255,255,255,0.05);font-size:8px;letter-spacing:3px;color:rgba(255,255,255,0.15);font-family:'Inter',sans-serif;text-align:center;">
+          v1.0 · Duck Hunt 3D · <span style="color:rgba(255,204,2,0.3)">Luca Sanguinetti</span>
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+function quitToMenu() {
+  activeMode  = 'none';
+  gamePaused  = false;
+  gameRunning = false;
+  coopRunning = false;
+  coopPaused  = false;
+  document.getElementById('pause-overlay').style.display = 'none';
+  for (const d of ducks) scene.remove(d);
+  ducks.length = 0;
+  for (const o of orbs) scene.remove(o);
+  orbs.length = 0;
+  hasMinigun = false; minigunTimer = 0;
+  equipAK(); updateMinigunUI();
+  buildMainMenu();
+}
+
+// ─── START / END ─────────────────────────────────────────────────────
+function startGame() {
+  // ── Atomically stop any other mode first ──────────────────────
+  activeMode  = 'none';   // pause the loop while we reset
+  coopRunning = false;
+  coopPaused  = false;
+  gameRunning = false;
+  gamePaused  = false;
+
+  // Clean up coop leftovers
+  document.getElementById('coop-hud').style.display = 'none';
+  document.getElementById('coop-divider').style.display = 'none';
+  document.getElementById('coop-timer').style.display = 'none';
+  document.getElementById('ch-p1').style.display = 'none';
+  document.getElementById('ch-p2').style.display = 'none';
+  gun1.visible = false; gun2.visible = false;
+  char1.visible = false; char2.visible = false;
+  for (const d of coopDucks) scene.remove(d);
+  coopDucks.length = 0;
+
+  // Show solo UI
+  document.getElementById('ui').style.display = 'flex';
+  document.getElementById('progress-bar').style.display = 'block';
+  document.getElementById('crosshair').style.display = 'block';
+  gunGroup.visible = true;
+  document.getElementById('screen-overlay').style.display = 'none';
+  document.getElementById('pause-overlay').style.display = 'none';
+
+  // ── Solo game state ───────────────────────────────────────────
+  gameRunning = true;
+  score = 0;
+  killed = 0;
+  ducksSpawned = 0;
+  ammo = MAX_AMMO;
+  reloading = false;
+  spawnInterval = 0.5;
+  velY = 0;
+  isGrounded = true;
+  warningPlayed = false;
+  dashTimer = 0;
+  dashCooldown = 0;
+  dashVel.set(0, 0, 0);
+
+  // Clear ducks
+  for (const d of ducks) scene.remove(d);
+  ducks.length = 0;
+
+  // Clear orbs
+  for (const o of orbs) scene.remove(o);
+  orbs.length = 0;
+  hasMinigun = false;
+  minigunTimer = 0;
+  minigunFireTimer = 0;
+  equipAK();
+  updateMinigunUI();
+
+  document.getElementById('score').textContent = '0';
+  document.getElementById('killed').textContent = '0';
+  document.getElementById('progress-fill').style.width = '0%';
+  timeLeft = 120;
+  updateTimerUI();
+  updateAmmoUI();
+
+  canvas.requestPointerLock();
+  activeMode = 'solo'; // ← engage loop last, after everything is ready
+}
+
+function endGame(reason) {
+  if (!gameRunning) return;
+  activeMode  = 'none';
+  gameRunning = false;
+  document.exitPointerLock && document.exitPointerLock();
+
+  const timedOut = reason === 'timeout';
+  const won = score >= 600;
+  const timeUsed = 120 - timeLeft;
+  const minsUsed = Math.floor(timeUsed / 60);
+  const secsUsed = Math.floor(timeUsed % 60);
+
+  // Save score and find rank
+  const allScores = saveScore(score, killed, timeUsed, 'solo');
+  const rank = allScores.findIndex(s => s.pts === score && s.kills === killed) + 1;
+  const isNewBest = rank === 1 && allScores.length >= 1;
+
+  const overlay = document.getElementById('screen-overlay');
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div id="overlay-bg"></div>
+    <div id="overlay-grid"></div>
+    <div id="overlay-scan"></div>
+    <div id="overlay-vignette"></div>
+    <div id="overlay-content">
+      <div class="end-badge" style="color:${won?'rgba(255,200,0,0.8)':'rgba(255,60,60,0.8)'}; border-color:${won?'rgba(255,200,0,0.3)':'rgba(255,60,60,0.3)'}; background:${won?'rgba(255,200,0,0.06)':'rgba(255,60,60,0.06)'}">
+        ${timedOut ? '⏱ Tiempo agotado' : won ? '🏆 Objetivo superado' : '💀 Puntuación insuficiente'}
+        ${isNewBest ? ' · ✨ NUEVO RÉCORD' : rank > 0 ? ` · #${rank} en scoreboard` : ''}
+      </div>
+      <div class="end-title" style="color:${won?'#ffcc02':'#ff4444'}; text-shadow: 0 0 60px ${won?'rgba(255,200,0,0.5)':'rgba(255,60,60,0.5)'}">${won?'VICTORIA':'DERROTA'}</div>
+      <div class="end-sub">${won ? 'Lograste el mínimo requerido' : timedOut ? 'El tiempo llegó a cero' : 'No alcanzaste los 600 puntos'}</div>
+      <div class="end-results">
+        <div class="end-result">
+          <div class="end-result-val" style="color:#ffcc02">${score}</div>
+          <div class="end-result-label">Puntos</div>
+        </div>
+        <div class="end-result">
+          <div class="end-result-val" style="color:#fff">${killed}<span style="font-size:18px;opacity:0.4">/100</span></div>
+          <div class="end-result-label">Patos</div>
+        </div>
+        <div class="end-result">
+          <div class="end-result-val" style="color:#fff">${minsUsed}:${String(secsUsed).padStart(2,'0')}</div>
+          <div class="end-result-label">Tiempo</div>
+        </div>
+        <div class="end-result">
+          <div class="end-result-val" style="color:${won?'#4ade80':'#f87171'}">${won?'✓':'✗'}</div>
+          <div class="end-result-label">${won?'Ganaste':'Perdiste'}</div>
+        </div>
+      </div>
+      <button class="menu-cta" onclick="startGame()">JUGAR DE NUEVO</button>
+      <button class="btn" onclick="quitToMenu()" style="margin-top:12px; font-size:13px; letter-spacing:4px; padding:11px 36px;">MENÚ PRINCIPAL</button>
+      <div class="menu-version" style="margin-top:16px">${won?'Puntaje mínimo: 600 pts':'Necesitabas '+(600-score)+' pts más'}</div>
+    </div>
+  `;
+}
+
+document.getElementById('start-btn')?.addEventListener('click', startGame);
+
+// Build dynamic menu on first load (after all functions are defined)
+buildMainMenu();
+
+// ═══════════════════════════════════════════════════════════════════
+// ─── GAMEPAD / PS5 DUALSENSE SUPPORT ────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//
+// PS5 DualSense button mapping (Gamepad API standard):
+//   0  = Cross (✕)        → Jump / Confirm
+//   1  = Circle (○)       → Reload
+//   2  = Square (□)       → Dash
+//   3  = Triangle (△)     → (unused)
+//   4  = L1               → (unused)
+//   5  = R1               → Shoot
+//   6  = L2               → Shoot (analog trigger)
+//   7  = R2               → Shoot (analog trigger)
+//   8  = Share
+//   9  = Options          → Pause
+//  10  = L3 (stick click)
+//  11  = R3 (stick click)
+//  12  = D-Pad Up
+//  13  = D-Pad Down
+//  14  = D-Pad Left
+//  15  = D-Pad Right
+//
+// Axes:
+//   0 = Left stick X  → Move left/right
+//   1 = Left stick Y  → Move forward/back
+//   2 = Right stick X → Look left/right
+//   3 = Right stick Y → Look up/down
+
+const DEADZONE = 0.12;
+const GP_LOOK_SENS = 1.8; // degrees per frame at full deflection
+
+// Track per-controller button states to detect rising edges
+const gpPrev = [{}, {}];
+
+function getGamepads() {
+  return Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean);
+}
+
+function gpAxis(gp, axis) {
+  const v = gp.axes[axis] ?? 0;
+  return Math.abs(v) > DEADZONE ? v : 0;
+}
+
+function gpBtn(gp, idx) {
+  const b = gp.buttons[idx];
+  return b ? (typeof b === 'object' ? b.pressed || b.value > 0.2 : b) : false;
+}
+
+function gpBtnJustPressed(gpIndex, btnIndex) {
+  const gp = getGamepads()[gpIndex];
+  if (!gp) return false;
+  const cur = gpBtn(gp, btnIndex);
+  const prev = gpPrev[gpIndex][btnIndex] || false;
+  gpPrev[gpIndex][btnIndex] = cur;
+  return cur && !prev;
+}
+
+// Show connection toast
+window.addEventListener('gamepadconnected', e => {
+  const name = e.gamepad.id.toLowerCase();
+  const isPS = name.includes('dualsense') || name.includes('playstation') || name.includes('054c');
+  showToast(`🎮 ${isPS ? 'DualSense PS5' : 'Control'} conectado (P${e.gamepad.index + 1})`);
+});
+window.addEventListener('gamepaddisconnected', e => {
+  showToast(`🎮 Control P${e.gamepad.index + 1} desconectado`);
+});
+
+function showToast(msg) {
+  let t = document.getElementById('gp-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'gp-toast';
+    t.style.cssText = `
+      position:fixed; bottom:60px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.8); border:1px solid rgba(255,255,255,0.15);
+      backdrop-filter:blur(8px); color:#fff; font-family:'Inter',sans-serif;
+      font-size:12px; letter-spacing:2px; padding:9px 20px; border-radius:20px;
+      z-index:50; transition:opacity 0.4s; pointer-events:none;
+    `;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+}
+
+// ── Solo mode gamepad update (called from update loop) ────────────
+function updateGamepadSolo(dt) {
+  const gp = getGamepads()[0];
+  if (!gp) return;
+
+  // ── Movement — left stick ──────────────────────────────────────
+  const lx = gpAxis(gp, 0);
+  const ly = gpAxis(gp, 1);
+  if (lx !== 0 || ly !== 0) {
+    const move = new THREE.Vector3(lx, 0, ly).normalize().multiplyScalar(dt * 8);
+    move.applyEuler(new THREE.Euler(0, rotY, 0));
+    camera.position.add(move);
+    camera.position.x = Math.max(-60, Math.min(60, camera.position.x));
+    camera.position.z = Math.max(-60, Math.min(60, camera.position.z));
+  }
+
+  // ── Look — right stick ─────────────────────────────────────────
+  const rx = gpAxis(gp, 2);
+  const ry = gpAxis(gp, 3);
+  rotY  -= rx * dt * GP_LOOK_SENS;
+  pitch  = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch - ry * dt * GP_LOOK_SENS));
+
+  // ── Shoot — R2 or R1 (rising edge) ────────────────────────────
+  if (gpBtnJustPressed(0, 7) || gpBtnJustPressed(0, 5)) shoot();
+
+  // ── Reload — Circle (1) ────────────────────────────────────────
+  if (gpBtnJustPressed(0, 1)) reload();
+
+  // ── Jump — Cross (0) ──────────────────────────────────────────
+  if (gpBtnJustPressed(0, 0) && isGrounded) {
+    velY = 8; isGrounded = false; playJump();
+  }
+
+  // ── Dash — Square (2) ─────────────────────────────────────────
+  if (gpBtnJustPressed(0, 2) && dashCooldown <= 0) {
+    const dir = new THREE.Vector3(lx || 0, 0, ly || -1).normalize();
+    dir.applyEuler(new THREE.Euler(0, rotY, 0));
+    dashVel.copy(dir.multiplyScalar(DASH_SPEED));
+    dashTimer = DASH_DURATION; dashCooldown = DASH_COOLDOWN;
+    playDash(); camera.fov = 95; camera.updateProjectionMatrix();
+  }
+
+  // ── Pause — Options (9) ───────────────────────────────────────
+  if (gpBtnJustPressed(0, 9)) {
+    gamePaused ? resumeGame() : pauseGame();
+  }
+
+  // ── D-Pad also moves ──────────────────────────────────────────
+  if (gpBtn(gp, 12)) { const m = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,rotY,0)).multiplyScalar(dt*8); camera.position.add(m); }
+  if (gpBtn(gp, 13)) { const m = new THREE.Vector3(0,0, 1).applyEuler(new THREE.Euler(0,rotY,0)).multiplyScalar(dt*8); camera.position.add(m); }
+  if (gpBtn(gp, 14)) { const m = new THREE.Vector3(-1,0,0).applyEuler(new THREE.Euler(0,rotY,0)).multiplyScalar(dt*8); camera.position.add(m); }
+  if (gpBtn(gp, 15)) { const m = new THREE.Vector3( 1,0,0).applyEuler(new THREE.Euler(0,rotY,0)).multiplyScalar(dt*8); camera.position.add(m); }
+}
+
+// ── Coop mode gamepad update (called from updateCoop) ────────────
+function updateGamepadCoop(dt) {
+  const gps = getGamepads();
+
+  players.forEach((p, idx) => {
+    const gp = gps[idx];
+    if (!gp) return;
+
+    // ── Movement — left stick ────────────────────────────────────
+    const lx = gpAxis(gp, 0);
+    const ly = gpAxis(gp, 1);
+    if (lx !== 0 || ly !== 0) {
+      const move = new THREE.Vector3(lx, 0, ly).normalize().multiplyScalar(dt * 8);
+      move.applyEuler(new THREE.Euler(0, p.rotY, 0));
+      p.cam.position.add(move);
+      p.cam.position.x = Math.max(-60, Math.min(60, p.cam.position.x));
+      p.cam.position.z = Math.max(-60, Math.min(60, p.cam.position.z));
+    }
+
+    // ── Look — right stick ───────────────────────────────────────
+    const rx = gpAxis(gp, 2);
+    const ry = gpAxis(gp, 3);
+    p.rotY  -= rx * dt * GP_LOOK_SENS;
+    p.pitch  = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, p.pitch - ry * dt * GP_LOOK_SENS));
+
+    // ── Shoot — R2 or R1 ─────────────────────────────────────────
+    if (gpBtnJustPressed(idx, 7) || gpBtnJustPressed(idx, 5)) coopShoot(p);
+
+    // ── Reload — Circle (1) ──────────────────────────────────────
+    if (gpBtnJustPressed(idx, 1)) coopReload(p);
+
+    // ── Jump — Cross (0) ─────────────────────────────────────────
+    if (gpBtnJustPressed(idx, 0) && p.isGrounded) {
+      p.velY = 8; p.isGrounded = false; playJump();
+    }
+
+    // ── Dash — Square (2) ────────────────────────────────────────
+    if (gpBtnJustPressed(idx, 2) && p.dashCooldown <= 0) {
+      const dir = new THREE.Vector3(lx || 0, 0, ly || -1).normalize();
+      dir.applyEuler(new THREE.Euler(0, p.rotY, 0));
+      p.dashVel.copy(dir.multiplyScalar(28));
+      p.dashTimer = 0.18; p.dashCooldown = 1.0;
+      playDash(); p.cam.fov = 95; p.cam.updateProjectionMatrix();
+    }
+
+    // ── Pause — Options (9) ──────────────────────────────────────
+    if (gpBtnJustPressed(idx, 9)) {
+      coopPaused ? coopResume() : coopPause();
+    }
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ─── COOP MODE ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+
+let coopPaused  = false;
+let coopTimeLeft = 120;
+let coopWarningPlayed = false;
+let coopDucksSpawned = 0;
+let coopSpawnInterval = 0;
+const COOP_TOTAL_DUCKS = 100;
+const coopDucks = [];
+
+// ── Two players ───────────────────────────────────────────────────
+const cam1 = new THREE.PerspectiveCamera(75, 1, 0.1, 200);
+const cam2 = new THREE.PerspectiveCamera(75, 1, 0.1, 200);
+cam1.position.set(-3, 1.7, 0);
+cam2.position.set( 3, 1.7, 5);
+
+// First-person gun clones (children of each camera, only visible in own view)
+const gun1 = gunGroup.clone();
+const gun2 = gunGroup.clone();
+gun1.position.set(0.18,-0.24,-0.38); gun1.rotation.set(0.04,0.06,0);
+gun2.position.set(0.18,-0.24,-0.38); gun2.rotation.set(0.04,0.06,0);
+cam1.add(gun1);
+cam2.add(gun2);
+scene.add(cam1);
+scene.add(cam2);
+gun1.visible = false;
+gun2.visible = false;
+
+// ── Player character models (seen by the OPPONENT's camera) ────────
+function createPlayerCharacter(color) {
+  const g = new THREE.Group();
+  const matBody   = new THREE.MeshLambertMaterial({ color });
+  const matSkin   = new THREE.MeshLambertMaterial({ color: 0xf5cba7 });
+  const matDark   = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const matShoes  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+  const matGun    = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+
+  // Legs
+  const legData = [];
+  for (const sx of [-0.11, 0.11]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.18), matDark);
+    leg.position.set(sx, -0.55, 0);
+    g.add(leg);
+    legData.push(leg);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.1, 0.24), matShoes);
+    shoe.position.set(sx, -0.80, 0.03);
+    g.add(shoe);
+  }
+  g.userData.legL = legData[0];
+  g.userData.legR = legData[1];
+
+  // Torso
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.52, 0.24), matBody);
+  torso.position.set(0, -0.10, 0);
+  g.add(torso);
+
+  // Head
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), matSkin);
+  head.position.set(0, 0.38, 0);
+  g.add(head);
+
+  // Eyes
+  for (const ex of [-0.08, 0.08]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.04), matDark);
+    eye.position.set(ex, 0.42, 0.17);
+    g.add(eye);
+  }
+
+  // Arms
+  for (const sx of [-0.30, 0.30]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.40, 0.14), matBody);
+    arm.position.set(sx, -0.08, 0);
+    g.add(arm);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.13), matSkin);
+    hand.position.set(sx, -0.30, 0);
+    g.add(hand);
+  }
+
+  // Gun held in right hand
+  const gBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.42), matGun);
+  gBarrel.position.set(0.30, -0.28, -0.22);
+  g.add(gBarrel);
+  const gStock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.18), new THREE.MeshLambertMaterial({color:0x6b3a1f}));
+  gStock.position.set(0.30, -0.24, 0.02);
+  g.add(gStock);
+
+  g.position.y = 0; // will be set to cam.y - 1.7 each frame
+  return g;
+}
+
+const char1 = createPlayerCharacter(0xffcc02); // P1 — yellow
+const char2 = createPlayerCharacter(0x44aaff); // P2 — blue
+char1.visible = false;
+char2.visible = false;
+scene.add(char1);
+scene.add(char2);
+
+const players = [
+  {
+    cam: cam1, gun: gun1, char: char1, otherChar: char2,
+    score: 0, kills: 0,
+    ammo: 6, reloading: false, reloadTimer: 0,
+    pitch: 0, rotY: 0,
+    velY: 0, isGrounded: true,
+    dashVel: new THREE.Vector3(), dashTimer: 0, dashCooldown: 0,
+    gunKickTimer: 0,
+    hasMinigun: false, minigunTimer: 0, minigunFireTimer: 0,
+    color: '#ffcc02', label: 'P1', ammoClass: 'p1',
+  },
+  {
+    cam: cam2, gun: gun2, char: char2, otherChar: char1,
+    score: 0, kills: 0,
+    ammo: 6, reloading: false, reloadTimer: 0,
+    pitch: 0, rotY: Math.PI,
+    velY: 0, isGrounded: true,
+    dashVel: new THREE.Vector3(), dashTimer: 0, dashCooldown: 0,
+    gunKickTimer: 0,
+    hasMinigun: false, minigunTimer: 0, minigunFireTimer: 0,
+    color: '#44aaff', label: 'P2', ammoClass: 'p2',
+  }
+];
+
+// ── Input maps ────────────────────────────────────────────────────
+const coopKeys = {};
+document.addEventListener('keydown', e => {
+  coopKeys[e.code] = true;
+  if (e.code === 'Escape' && coopRunning) {
+    coopPaused ? coopResume() : coopPause();
+  }
+  // P1 jump
+  if (e.code === 'Space' && coopRunning && !coopPaused && players[0].isGrounded) {
+    players[0].velY = 8; players[0].isGrounded = false; playJump();
+  }
+  // P2 jump (L key)
+  if (e.code === 'KeyL' && coopRunning && !coopPaused && players[1].isGrounded) {
+    players[1].velY = 8; players[1].isGrounded = false; playJump();
+  }
+  // P1 dash
+  if ((e.code === 'ShiftLeft'||e.code === 'ShiftRight') && coopRunning && !coopPaused && players[0].dashCooldown <= 0) {
+    coopDash(players[0], ['KeyW','KeyS','KeyA','KeyD']);
+  }
+  // P2 shoot (U)
+  if (e.code === 'KeyU' && coopRunning && !coopPaused) {
+    coopShoot(players[1]);
+  }
+  // P2 reload (O)
+  if (e.code === 'KeyO' && coopRunning && !coopPaused) {
+    coopReload(players[1]);
+  }
+  // P2 dash (P)
+  if (e.code === 'KeyP' && coopRunning && !coopPaused && players[1].dashCooldown <= 0) {
+    coopDash(players[1], ['KeyI','KeyK','KeyJ','KeyL']);
+  }
+});
+document.addEventListener('keyup', e => { coopKeys[e.code] = false; });
+
+// P1 shoot on mouse click (left half - but we just check click when coop active)
+document.addEventListener('mousedown', e => {
+  if (!coopRunning || coopPaused) return;
+  if (e.button === 0) coopShoot(players[0]);
+  if (e.button === 2) coopReload(players[0]);
+});
+
+// Mouse look for P1
+document.addEventListener('mousemove', e => {
+  if (!coopRunning || coopPaused) return;
+  const sens = 0.002;
+  players[0].rotY  -= e.movementX * sens;
+  players[0].pitch  = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, players[0].pitch - e.movementY * sens));
+});
+
+// ── Coop helpers ──────────────────────────────────────────────────
+const coopRaycaster = new THREE.Raycaster();
+
+function coopShoot(p) {
+  if (p.ammo <= 0 || p.reloading) return;
+  p.ammo--;
+  p.gunKickTimer = 0.15;
+  updateCoopAmmo(p);
+  playShoot();
+
+  coopRaycaster.setFromCamera(new THREE.Vector2(0, 0), p.cam);
+  let hit = null, closestDist = Infinity;
+  for (const duck of coopDucks) {
+    if (!duck.userData.alive) continue;
+    const sphere = new THREE.Sphere(duck.position, 0.6);
+    const pt = new THREE.Vector3();
+    if (coopRaycaster.ray.intersectSphere(sphere, pt)) {
+      const d = p.cam.position.distanceTo(duck.position);
+      if (d < closestDist) { closestDist = d; hit = duck; }
+    }
+  }
+  if (hit) coopKillDuck(hit, p);
+  if (p.ammo === 0) setTimeout(() => coopReload(p), 300);
+}
+
+function coopReload(p) {
+  if (p.reloading || p.ammo === 6) return;
+  p.reloading = true; p.reloadTimer = 1.2;
+  playReload();
+}
+
+function coopDash(p, moveCodes) {
+  const [fw, bk, lt, rt] = moveCodes;
+  const dir = new THREE.Vector3();
+  if (coopKeys[fw]) dir.z -= 1;
+  if (coopKeys[bk]) dir.z += 1;
+  if (coopKeys[lt]) dir.x -= 1;
+  if (coopKeys[rt]) dir.x += 1;
+  if (dir.length() === 0) dir.z = -1;
+  dir.normalize().applyEuler(new THREE.Euler(0, p.rotY, 0));
+  p.dashVel.copy(dir.multiplyScalar(28));
+  p.dashTimer = 0.18; p.dashCooldown = 1.0;
+  playDash();
+  p.cam.fov = 95; p.cam.updateProjectionMatrix();
+}
+
+function coopKillDuck(duck, scorer) {
+  duck.userData.alive = false;
+  duck.userData.dying = true;
+  duck.userData.dyingTimer = 1.2;
+  duck.userData.velocity.y = -0.05;
+  duck.userData.velocity.x *= 0.5;
+  duck.userData.velocity.z *= 0.5;
+  spawnFeathers(duck.position.clone());
+  scorer.score += 10;
+  scorer.kills++;
+  updateCoopHUD();
+  const totalKills = players[0].kills + players[1].kills;
+  if (totalKills >= COOP_TOTAL_DUCKS) coopEndGame('complete');
+}
+
+function updateCoopHUD() {
+  const p1 = players[0], p2 = players[1];
+  document.getElementById('cp1-score').textContent = p1.score;
+  document.getElementById('cp1-kills').innerHTML = p1.kills + '<span style="font-size:12px;opacity:0.4">/100</span>';
+  document.getElementById('cp2-score').textContent = p2.score;
+  document.getElementById('cp2-kills').innerHTML = p2.kills + '<span style="font-size:12px;opacity:0.4">/100</span>';
+}
+
+function updateCoopAmmo(p) {
+  const id = p === players[0] ? 'cp1-ammo' : 'cp2-ammo';
+  const cls = p.ammoClass;
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  for (let i = 0; i < 6; i++) {
+    const pip = document.createElement('div');
+    pip.className = `coop-pip ${i < p.ammo ? cls+'-full' : cls+'-empty'}`;
+    el.appendChild(pip);
+  }
+}
+
+function updateCoopTimer() {
+  const m = Math.floor(coopTimeLeft / 60);
+  const s = Math.floor(coopTimeLeft % 60);
+  const el = document.getElementById('coop-timer');
+  el.textContent = m + ':' + String(s).padStart(2,'0');
+  if (coopTimeLeft <= 30) {
+    el.style.color = '#ff4444';
+    if (!coopWarningPlayed) { coopWarningPlayed = true; playTimerWarning(); }
+  } else {
+    el.style.color = 'rgba(255,255,255,0.7)';
+  }
+}
+
+// ── Coop spawn ────────────────────────────────────────────────────
+function spawnCoopDuck() {
+  const duck = createDuck();
+  const angle = Math.random() * Math.PI * 2;
+  const dist  = Math.random() * 30 + 15;
+  duck.position.set(Math.cos(angle)*dist, Math.random()*10+3, Math.sin(angle)*dist);
+  const speed = Math.random()*0.04+0.02;
+  duck.userData = {
+    velocity: new THREE.Vector3((Math.random()-.5),(Math.random()-.5)*0.2,(Math.random()-.5)).normalize().multiplyScalar(speed),
+    wingPhase: Math.random()*Math.PI*2, radius: 0.6, alive: true
+  };
+  scene.add(duck);
+  coopDucks.push(duck);
+}
+
+// ── Coop update loop ──────────────────────────────────────────────
+function updateCoop(dt) {
+  if (activeMode !== 'coop' || coopPaused) return;
+  updateGamepadCoop(dt);
+
+  // Timer
+  coopTimeLeft -= dt;
+  updateCoopTimer();
+  if (coopTimeLeft <= 0) { coopTimeLeft = 0; coopEndGame('timeout'); return; }
+
+  // Spawn
+  if (coopDucksSpawned < COOP_TOTAL_DUCKS) {
+    coopSpawnInterval -= dt;
+    if (coopSpawnInterval <= 0) { spawnCoopDuck(); coopDucksSpawned++; coopSpawnInterval = 0.7; }
+  }
+
+  // Update ducks (shared world)
+  const t = clock.getElapsedTime();
+  for (const duck of coopDucks) {
+    if (!duck.userData.alive && !duck.userData.dying) continue;
+    if (duck.userData.dying) {
+      duck.userData.dyingTimer -= dt;
+      duck.userData.velocity.y -= 0.003;
+      duck.position.add(duck.userData.velocity);
+      duck.rotation.z += 0.1;
+      if (duck.userData.dyingTimer <= 0 || duck.position.y < -5) { scene.remove(duck); duck.userData.dying = false; }
+      continue;
+    }
+    const phase = duck.userData.wingPhase + t * 8;
+    for (const child of duck.children) {
+      if (child.name === 'wing_r') child.rotation.z = Math.sin(phase)*0.6;
+      if (child.name === 'wing_l') child.rotation.z = -Math.sin(phase)*0.6;
+    }
+    duck.position.add(duck.userData.velocity);
+    duck.position.y += Math.sin(t*3+duck.userData.wingPhase)*0.005;
+    if (Math.abs(duck.position.x)>55) duck.userData.velocity.x*=-1;
+    if (Math.abs(duck.position.z)>55) duck.userData.velocity.z*=-1;
+    if (duck.position.y>20) duck.userData.velocity.y*=-1;
+    if (duck.position.y<2) duck.userData.velocity.y=Math.abs(duck.userData.velocity.y);
+  }
+
+  // Update each player
+  players.forEach((p, idx) => {
+    const moveCodes = idx === 0
+      ? { f:'KeyW', b:'KeyS', l:'KeyA', r:'KeyD' }
+      : { f:'KeyI', b:'KeyK', l:'KeyJ', r:'KeyL' };
+
+    // Move
+    const move = new THREE.Vector3();
+    if (coopKeys[moveCodes.f]) move.z -= 1;
+    if (coopKeys[moveCodes.b]) move.z += 1;
+    if (coopKeys[moveCodes.l]) move.x -= 1;
+    if (coopKeys[moveCodes.r]) move.x += 1;
+    if (move.length() > 0) {
+      move.normalize().multiplyScalar(dt * 8).applyEuler(new THREE.Euler(0, p.rotY, 0));
+      p.cam.position.add(move);
+      p.cam.position.x = Math.max(-60, Math.min(60, p.cam.position.x));
+      p.cam.position.z = Math.max(-60, Math.min(60, p.cam.position.z));
+    }
+
+    // Dash
+    if (p.dashCooldown > 0) p.dashCooldown -= dt;
+    if (p.dashTimer > 0) {
+      p.dashTimer -= dt;
+      const t2 = Math.max(0, p.dashTimer/0.18);
+      p.cam.position.addScaledVector(p.dashVel, dt*t2);
+      p.cam.fov = 75 + t2*20; p.cam.updateProjectionMatrix();
+    } else if (p.cam.fov !== 75) { p.cam.fov = 75; p.cam.updateProjectionMatrix(); }
+
+    // Jump/gravity
+    p.velY -= 22 * dt;
+    p.cam.position.y += p.velY * dt;
+    if (p.cam.position.y <= 1.7) { p.cam.position.y = 1.7; p.velY = 0; p.isGrounded = true; }
+
+    // Camera look (P1: mouse, P2: fixed horizontal look with keys — no mouse)
+    if (idx === 1) {
+      // P2 look left/right with Q and E (bonus)
+      if (coopKeys['KeyQ']) p.rotY += dt * 1.8;
+      if (coopKeys['KeyE']) p.rotY -= dt * 1.8;
+    }
+    p.cam.quaternion.setFromEuler(new THREE.Euler(p.pitch, p.rotY, 0, 'YXZ'));
+
+    // Gun kick
+    if (p.gunKickTimer > 0) {
+      p.gunKickTimer -= dt;
+      const k = Math.max(0, p.gunKickTimer/0.15);
+      p.gun.position.z = -0.38 + k*0.07;
+      p.gun.rotation.x = 0.04 - k*0.12;
+    } else { p.gun.position.z = -0.38; p.gun.rotation.x = 0.04; }
+
+    // Reload
+    if (p.reloading) {
+      p.reloadTimer -= dt;
+      if (p.reloadTimer <= 0) { p.ammo = 6; p.reloading = false; updateCoopAmmo(p); }
+    }
+  });
+
+  // Update crosshair positions
+  document.getElementById('ch-p1').style.cssText = `
+    display:block; left:calc(50% - 18px); top:25vh; transform:translateY(-50%);`;
+  document.getElementById('ch-p2').style.cssText = `
+    display:block; left:calc(50% - 18px); top:75vh; transform:translateY(-50%);`;
+
+  // Sync character bodies to camera positions with walk animation
+  const tElapsed = clock.getElapsedTime();
+  [char1, char2].forEach((ch, idx) => {
+    const p = players[idx];
+    // Camera is at eye height (1.7). Character feet bottom at y = group_center - 0.85.
+    // So to put feet at world y=0: group_y = groundY + 0.85
+    const groundY = p.cam.position.y - 1.7; // 0 when standing on ground
+    ch.position.set(p.cam.position.x, groundY + 0.85, p.cam.position.z);
+    ch.rotation.y = p.rotY + Math.PI; // face forward
+
+    // Walk bob — only animate legs/arms if moving
+    const moving = (idx === 0)
+      ? (coopKeys['KeyW']||coopKeys['KeyS']||coopKeys['KeyA']||coopKeys['KeyD'])
+      : (coopKeys['KeyI']||coopKeys['KeyK']||coopKeys['KeyJ']||coopKeys['KeyL']);
+    const walkCycle = moving ? Math.sin(tElapsed * 9) : 0;
+    if (ch.userData && ch.userData.legL) {
+      ch.userData.legL.rotation.x =  walkCycle * 0.4;
+      ch.userData.legR.rotation.x = -walkCycle * 0.4;
+    }
+  });
+}
+
+// ── Coop render ───────────────────────────────────────────────────
+function renderCoop() {
+  if (!coopRunning) return;
+  const W = renderer.domElement.width;
+  const H = renderer.domElement.height;
+  const half = Math.floor(H / 2);
+
+  // Always hide the solo gunGroup in coop
+  gunGroup.visible = false;
+
+  renderer.setScissorTest(true);
+
+  // ── Top half — Player 1 view ──────────────────────────────────
+  // P1 sees: own FP gun, P2's character. Hide own character.
+  gun1.visible = true;
+  gun2.visible = false;
+  char1.visible = false;
+  char2.visible = true;
+
+  renderer.setViewport(0, half, W, half);
+  renderer.setScissor(0, half, W, half);
+  cam1.aspect = W / half;
+  cam1.updateProjectionMatrix();
+  renderer.render(scene, cam1);
+
+  // ── Bottom half — Player 2 view ───────────────────────────────
+  // P2 sees: own FP gun, P1's character. Hide own character.
+  gun1.visible = false;
+  gun2.visible = true;
+  char1.visible = true;
+  char2.visible = false;
+
+  renderer.setViewport(0, 0, W, half);
+  renderer.setScissor(0, 0, W, half);
+  cam2.aspect = W / half;
+  cam2.updateProjectionMatrix();
+  renderer.render(scene, cam2);
+
+  renderer.setScissorTest(false);
+}
+
+// ── Coop pause ────────────────────────────────────────────────────
+function coopPause() {
+  coopPaused = true;
+  document.exitPointerLock && document.exitPointerLock();
+  document.getElementById('pause-score').textContent = `P1: ${players[0].score} · P2: ${players[1].score}`;
+  document.getElementById('pause-killed').textContent = players[0].kills + players[1].kills;
+  document.getElementById('pause-time').textContent = document.getElementById('coop-timer').textContent;
+  const p = document.getElementById('pause-overlay');
+  p.style.display = 'flex';
+  const panel = document.getElementById('pause-panel');
+  panel.style.animation = 'none'; panel.offsetHeight; panel.style.animation = '';
+}
+
+function coopResume() {
+  coopPaused = false;
+  document.getElementById('pause-overlay').style.display = 'none';
+  canvas.requestPointerLock();
+}
+
+// restartFromPause is defined above (mode-aware)
+
+// ── Coop start ────────────────────────────────────────────────────
+function startCoop() {
+  // ── Atomically stop any other mode first ──────────────────────
+  activeMode  = 'none';
+  gameRunning = false;
+  gamePaused  = false;
+  coopRunning = false;
+  coopPaused  = false;
+
+  // Clean up solo leftovers
+  for (const d of ducks) scene.remove(d);
+  ducks.length = 0;
+  for (const o of orbs) scene.remove(o);
+  orbs.length = 0;
+  hasMinigun = false; minigunTimer = 0; minigunFireTimer = 0;
+  equipAK(); updateMinigunUI();
+
+  // Hide solo UI, show coop UI
+  document.getElementById('screen-overlay').style.display = 'none';
+  document.getElementById('ui').style.display = 'none';
+  document.getElementById('progress-bar').style.display = 'none';
+  document.getElementById('crosshair').style.display = 'none';
+  document.getElementById('coop-hud').style.display = 'block';
+  document.getElementById('coop-divider').style.display = 'block';
+  document.getElementById('coop-timer').style.display = 'block';
+  document.getElementById('ch-p1').style.display = 'block';
+  document.getElementById('ch-p2').style.display = 'block';
+
+  // Reset state
+  coopRunning = true; coopPaused = false;
+  coopTimeLeft = 120; coopWarningPlayed = false;
+  coopDucksSpawned = 0; coopSpawnInterval = 0.5;
+
+  // Hide solo mode gun (it's a child of solo camera, but camera is in scene)
+  gunGroup.visible = false;
+
+  // Show player characters and guns
+  char1.visible = true; char2.visible = true;
+  gun1.visible = true;  gun2.visible = true;
+
+  // Reset ducks
+  for (const d of coopDucks) scene.remove(d);
+  coopDucks.length = 0;
+
+  // Reset players
+  players[0].cam.position.set(-3, 1.7, 0);  players[0].rotY = 0;    players[0].pitch = 0;
+  players[1].cam.position.set( 3, 1.7, 5);  players[1].rotY = Math.PI; players[1].pitch = 0;
+  players.forEach(p => {
+    p.score=0; p.kills=0; p.ammo=6; p.reloading=false; p.reloadTimer=0;
+    p.velY=0; p.isGrounded=true; p.dashTimer=0; p.dashCooldown=0;
+    p.dashVel.set(0,0,0); p.gunKickTimer=0; p.hasMinigun=false;
+    p.gun.position.set(0.18,-0.24,-0.38); p.gun.rotation.set(0.04,0.06,0);
+    updateCoopAmmo(p);
+  });
+  updateCoopHUD();
+  updateCoopTimer();
+  canvas.requestPointerLock();
+
+  // Engage coop loop last, after everything is ready
+  coopRunning = true;
+  gunGroup.visible = false;
+  char1.visible = false;
+  char2.visible = false;
+  activeMode = 'coop';
+}
+
+// ── Coop end ─────────────────────────────────────────────────────
+function coopEndGame(reason) {
+  if (!coopRunning) return;
+  activeMode  = 'none';
+  coopRunning = false;
+  document.exitPointerLock && document.exitPointerLock();
+  gun1.visible = false; gun2.visible = false;
+  char1.visible = false; char2.visible = false;
+  gunGroup.visible = true;
+  char1.visible = false; char2.visible = false;
+  gunGroup.visible = true;
+
+  // Hide coop HUD
+  document.getElementById('coop-hud').style.display = 'none';
+  document.getElementById('coop-divider').style.display = 'none';
+  document.getElementById('coop-timer').style.display = 'none';
+  document.getElementById('ch-p1').style.display = 'none';
+  document.getElementById('ch-p2').style.display = 'none';
+
+  const p1 = players[0], p2 = players[1];
+  const winner = p1.score > p2.score ? 'P1' : p2.score > p1.score ? 'P2' : 'EMPATE';
+  const winColor = winner === 'P1' ? '#ffcc02' : winner === 'P2' ? '#44aaff' : '#aaa';
+  const timedOut = reason === 'timeout';
+  const timeUsedCoop = 120 - coopTimeLeft;
+
+  // Save both player scores
+  saveScore(p1.score, p1.kills, timeUsedCoop, 'coop');
+  saveScore(p2.score, p2.kills, timeUsedCoop, 'coop');
+
+  const overlay = document.getElementById('screen-overlay');
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div id="overlay-bg"></div>
+    <div id="overlay-grid"></div>
+    <div id="overlay-scan"></div>
+    <div id="overlay-vignette"></div>
+    <div id="overlay-content">
+      <div class="menu-badge" style="color:${winColor}; border-color:${winColor}44; background:${winColor}11">
+        ${timedOut ? '⏱ Tiempo agotado' : '🏁 Partida terminada'} · COOP
+      </div>
+      <div class="end-title" style="color:${winColor}; text-shadow:0 0 60px ${winColor}88">
+        ${winner === 'EMPATE' ? 'EMPATE' : winner + ' GANA'}
+      </div>
+      <div class="end-sub">${winner === 'EMPATE' ? 'Mismo puntaje — ¡juego parejo!' : `${winner} consiguió más patos`}</div>
+
+      <div class="end-results" style="margin-bottom:24px;">
+        <div class="end-result" style="border-right:1px solid rgba(255,255,255,0.08)">
+          <div style="font-size:10px;letter-spacing:3px;color:#ffcc0288;margin-bottom:4px;font-weight:600">P1</div>
+          <div class="end-result-val" style="color:#ffcc02">${p1.score}</div>
+          <div class="end-result-label">Puntos</div>
+        </div>
+        <div class="end-result" style="border-right:1px solid rgba(255,255,255,0.08)">
+          <div style="font-size:10px;letter-spacing:3px;color:#ffcc0288;margin-bottom:4px;font-weight:600">P1</div>
+          <div class="end-result-val" style="color:#fff">${p1.kills}</div>
+          <div class="end-result-label">Patos</div>
+        </div>
+        <div class="end-result" style="border-right:1px solid rgba(255,255,255,0.08)">
+          <div style="font-size:10px;letter-spacing:3px;color:#44aaff88;margin-bottom:4px;font-weight:600">P2</div>
+          <div class="end-result-val" style="color:#44aaff">${p2.score}</div>
+          <div class="end-result-label">Puntos</div>
+        </div>
+        <div class="end-result">
+          <div style="font-size:10px;letter-spacing:3px;color:#44aaff88;margin-bottom:4px;font-weight:600">P2</div>
+          <div class="end-result-val" style="color:#fff">${p2.kills}</div>
+          <div class="end-result-label">Patos</div>
+        </div>
+      </div>
+
+      <button class="menu-cta" onclick="startCoop()">REVANCHA</button>
+      <button class="btn" onclick="coopQuitToMenu()" style="margin-top:12px;font-size:13px;letter-spacing:4px;padding:11px 36px;">MENÚ PRINCIPAL</button>
+    </div>
+  `;
+}
+
+function coopQuitToMenu() {
+  activeMode  = 'none';
+  coopRunning = false;
+  gun1.visible = false; gun2.visible = false;
+  char1.visible = false; char2.visible = false;
+  gunGroup.visible = true;
+  document.getElementById('ui').style.display = 'flex';
+  document.getElementById('progress-bar').style.display = 'block';
+  document.getElementById('crosshair').style.display = 'block';
+  for (const d of coopDucks) scene.remove(d);
+  coopDucks.length = 0;
+  document.getElementById('coop-hud').style.display = 'none';
+  document.getElementById('coop-divider').style.display = 'none';
+  document.getElementById('coop-timer').style.display = 'none';
+  document.getElementById('ch-p1').style.display = 'none';
+  document.getElementById('ch-p2').style.display = 'none';
+  document.getElementById('pause-overlay').style.display = 'none';
+  gamePaused = false;
+  buildMainMenu();
+}
+
+// coop button uses onclick="startCoop()" — no static listener needed
+
+</script>
+</body>
+</html>
