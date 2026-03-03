@@ -824,12 +824,30 @@
 <script>
 // ─── AUDIO ───────────────────────────────────────────────────────────
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let audioCtx = null;
+let audioCtx        = null;
+let masterGainNode  = null;
+let masterVolume    = parseFloat(localStorage.getItem('master_volume') ?? '0.7');
 
 function getAudio() {
-  if (!audioCtx) audioCtx = new AudioCtx();
+  if (!audioCtx) {
+    audioCtx = new AudioCtx();
+    masterGainNode = audioCtx.createGain();
+    masterGainNode.gain.value = masterVolume;
+    masterGainNode.connect(audioCtx.destination);
+  }
   if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
+}
+
+function getOutput() {
+  getAudio();
+  return masterGainNode;
+}
+
+function setMasterVolume(v) {
+  masterVolume = Math.max(0, Math.min(1, v));
+  try { localStorage.setItem('master_volume', masterVolume); } catch(e) {}
+  if (masterGainNode) masterGainNode.gain.setTargetAtTime(masterVolume, audioCtx.currentTime, 0.01);
 }
 
 function playShoot() {
@@ -858,7 +876,7 @@ function playShoot() {
 
   osc.connect(dist);
   dist.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getOutput());
   osc.start(t);
   osc.stop(t + 0.2);
 
@@ -873,7 +891,7 @@ function playShoot() {
   noiseGain.gain.setValueAtTime(0.6, t);
   noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
   noise.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getOutput());
   noise.start(t);
 }
 
@@ -891,7 +909,7 @@ function playReload() {
     g.gain.setValueAtTime(0.25, t + delay);
     g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.07);
     osc.connect(g);
-    g.connect(ctx.destination);
+    g.connect(getOutput());
     osc.start(t + delay);
     osc.stop(t + delay + 0.08);
   });
@@ -912,7 +930,7 @@ function playReload() {
   ng.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
   noise.connect(filter);
   filter.connect(ng);
-  ng.connect(ctx.destination);
+  ng.connect(getOutput());
   noise.start(t + 0.1);
 }
 
@@ -928,7 +946,7 @@ function playJump() {
   gain.gain.setValueAtTime(0.35, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getOutput());
   osc.start(t);
   osc.stop(t + 0.25);
 
@@ -941,7 +959,7 @@ function playJump() {
   g2.gain.setValueAtTime(0.4, t);
   g2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
   osc2.connect(g2);
-  g2.connect(ctx.destination);
+  g2.connect(getOutput());
   osc2.start(t);
   osc2.stop(t + 0.1);
 }
@@ -964,7 +982,7 @@ function playTimerWarning() {
     g.gain.setValueAtTime(0.3, t + delay + 0.15);
     g.gain.linearRampToValueAtTime(0.0, t + delay + 0.18);
     osc.connect(g);
-    g.connect(ctx.destination);
+    g.connect(getOutput());
     osc.start(t + delay);
     osc.stop(t + delay + 0.2);
   });
@@ -978,7 +996,7 @@ function playTimerWarning() {
   bg.gain.setValueAtTime(0.5, t + 1.4);
   bg.gain.exponentialRampToValueAtTime(0.001, t + 1.7);
   bass.connect(bg);
-  bg.connect(ctx.destination);
+  bg.connect(getOutput());
   bass.start(t + 1.4);
   bass.stop(t + 1.8);
 }
@@ -1917,7 +1935,7 @@ function playKnifeSwing() {
   gain.gain.setValueAtTime(0.55, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
 
-  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  src.connect(filter); filter.connect(gain); gain.connect(getOutput());
   src.start(t); src.stop(t + 0.2);
 
   // Metallic ting at impact point
@@ -1928,7 +1946,7 @@ function playKnifeSwing() {
   osc.frequency.exponentialRampToValueAtTime(900, t + 0.14);
   og.gain.setValueAtTime(0.18, t + 0.06);
   og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-  osc.connect(og); og.connect(ctx.destination);
+  osc.connect(og); og.connect(getOutput());
   osc.start(t + 0.06); osc.stop(t + 0.24);
 }
 
@@ -1947,7 +1965,7 @@ function playKnifeHit() {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.7, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-  src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+  src.connect(lp); lp.connect(g); g.connect(getOutput());
   src.start(t); src.stop(t + 0.14);
 }
 
@@ -2186,7 +2204,7 @@ function playDogBark() {
       g.gain.setValueAtTime(0, t + off);
       g.gain.linearRampToValueAtTime(0.22, t + off + 0.02);
       g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.14);
-      osc.connect(g); g.connect(ctx.destination);
+      osc.connect(g); g.connect(getOutput());
       osc.start(t + off); osc.stop(t + off + 0.16);
     }
   } catch(e) {}
@@ -2447,7 +2465,7 @@ function playMinigunShot() {
   const curve = new Float32Array(128);
   for (let i = 0; i < 128; i++) { const x = (i*2)/128-1; curve[i]=(Math.PI+300)*x/(Math.PI+300*Math.abs(x)); }
   dist.curve = curve;
-  osc.connect(dist); dist.connect(g); g.connect(ctx.destination);
+  osc.connect(dist); dist.connect(g); g.connect(getOutput());
   osc.start(t); osc.stop(t + 0.07);
   // Crack
   const nb = ctx.createBuffer(1, ctx.sampleRate*0.04, ctx.sampleRate);
@@ -2456,7 +2474,7 @@ function playMinigunShot() {
   const ns = ctx.createBufferSource(); ns.buffer = nb;
   const ng = ctx.createGain();
   ng.gain.setValueAtTime(0.3, t); ng.gain.exponentialRampToValueAtTime(0.001, t+0.04);
-  ns.connect(ng); ng.connect(ctx.destination); ns.start(t);
+  ns.connect(ng); ng.connect(getOutput()); ns.start(t);
 }
 
 function playPickupOrb() {
@@ -2470,7 +2488,7 @@ function playPickupOrb() {
     osc.frequency.exponentialRampToValueAtTime(880 + i*220, t+d+0.12);
     g.gain.setValueAtTime(0.3, t+d);
     g.gain.exponentialRampToValueAtTime(0.001, t+d+0.15);
-    osc.connect(g); g.connect(ctx.destination);
+    osc.connect(g); g.connect(getOutput());
     osc.start(t+d); osc.stop(t+d+0.16);
   });
 }
@@ -2485,7 +2503,7 @@ function playMinigunEnd() {
   osc.frequency.exponentialRampToValueAtTime(60, t + 0.5);
   g.gain.setValueAtTime(0.4, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-  osc.connect(g); g.connect(ctx.destination);
+  osc.connect(g); g.connect(getOutput());
   osc.start(t); osc.stop(t + 0.55);
 }
 
@@ -2829,7 +2847,7 @@ function playDash() {
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
   noise.connect(filter);
   filter.connect(g);
-  g.connect(ctx.destination);
+  g.connect(getOutput());
   noise.start(t);
 
   // Sharp pitch blip
@@ -2841,7 +2859,7 @@ function playDash() {
   og.gain.setValueAtTime(0.25, t);
   og.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
   osc.connect(og);
-  og.connect(ctx.destination);
+  og.connect(getOutput());
   osc.start(t);
   osc.stop(t + 0.16);
 }
@@ -2929,7 +2947,7 @@ function playInspectSound() {
     g.gain.setValueAtTime(0, t + delay);
     g.gain.linearRampToValueAtTime(gain, t + delay + 0.01);
     g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.08);
-    osc.connect(g); g.connect(ctx.destination);
+    osc.connect(g); g.connect(getOutput());
     osc.start(t + delay); osc.stop(t + delay + 0.1);
   });
 }
@@ -3659,6 +3677,20 @@ document.addEventListener('keydown', e => {
 
 
 
+
+// ─── VOLUME CONTROL ──────────────────────────────────────────────────
+function onVolSlider(val) {
+  const v = parseInt(val) / 100;
+  setMasterVolume(v);
+  const lbl = document.getElementById('vol-label');
+  const sldr = document.getElementById('vol-slider');
+  const icon = document.getElementById('vol-icon');
+  if (lbl)  lbl.textContent = val;
+  if (sldr) sldr.style.background =
+    `linear-gradient(to right,#ffcc02 ${val}%,rgba(255,255,255,0.12) ${val}%)`;
+  if (icon) icon.textContent = v === 0 ? '🔇' : v < 0.4 ? '🔉' : '🔊';
+}
+
 // ─── MAP MENU ────────────────────────────────────────────────────────
 const MAP_DEFS = [
   {
@@ -3867,6 +3899,18 @@ function buildMainMenu() {
           <button onclick="startCoop()" style="flex:1;font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.4vw,20px);letter-spacing:5px;padding:clamp(12px,1.8vh,22px) 0;background:transparent;color:#4af;border:2px solid rgba(64,170,255,0.45);border-radius:7px;cursor:pointer;transition:all 0.18s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 32px rgba(64,170,255,0.2)';this.style.background='rgba(64,170,255,0.07)'" onmouseout="this.style.transform='';this.style.boxShadow='';this.style.background='transparent'">👥 COOP</button>
           <button onclick="buildSkinMenu()" style="font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.4vw,20px);letter-spacing:5px;padding:clamp(12px,1.8vh,22px) clamp(14px,1.6vw,22px);background:transparent;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.15);border-radius:7px;cursor:pointer;transition:all 0.18s;" onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.4)';this.style.transform='translateY(-3px)'" onmouseout="this.style.color='rgba(255,255,255,0.5)';this.style.borderColor='rgba(255,255,255,0.15)';this.style.transform=''">🎨 SKINS</button>
           <button onclick="buildMapMenu()" style="font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.4vw,20px);letter-spacing:5px;padding:clamp(12px,1.8vh,22px) clamp(14px,1.6vw,22px);background:transparent;color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.15);border-radius:7px;cursor:pointer;transition:all 0.18s;" onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.4)';this.style.transform='translateY(-3px)'" onmouseout="this.style.color='rgba(255,255,255,0.5)';this.style.borderColor='rgba(255,255,255,0.15)';this.style.transform=''">🗺️ MAPAS</button>
+        </div>
+
+        <!-- Volume control -->
+        <div style="display:flex;align-items:center;gap:clamp(8px,1vw,14px);margin-bottom:clamp(6px,0.8vh,10px);padding:clamp(8px,1.2vh,14px) clamp(12px,1.5vw,20px);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;">
+          <span style="font-size:16px;" id="vol-icon">🔊</span>
+          <span style="font-family:'Inter',sans-serif;font-size:clamp(8px,0.65vw,10px);letter-spacing:4px;color:rgba(255,255,255,0.35);white-space:nowrap;">VOLUMEN</span>
+          <input type="range" id="vol-slider" min="0" max="100"
+            value="${Math.round(masterVolume*100)}"
+            oninput="onVolSlider(this.value)"
+            style="flex:1;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;background:linear-gradient(to right,#ffcc02 ${Math.round(masterVolume*100)}%,rgba(255,255,255,0.12) ${Math.round(masterVolume*100)}%);outline:none;cursor:pointer;"
+          >
+          <span id="vol-label" style="font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.2vw,18px);color:#fff;min-width:2.5ch;text-align:right;">${Math.round(masterVolume*100)}</span>
         </div>
 
         <div style="display:flex;align-items:center;justify-content:space-between;">
